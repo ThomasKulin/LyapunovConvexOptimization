@@ -70,7 +70,7 @@ def T(z, dtype=Expression):
     T[4, 3] = 1
     return T
 
-
+""" Analyzing f, f_val is the normal IP on cart eqns, with denominator kept separate"""
 def f(z, u, T):
     assert len(z) == nz
     s = z[1]
@@ -94,7 +94,6 @@ def f2(z, T, dtype=Expression):
     return T @ f2_val
 
 
-# State limits (region of state space where we approximate the value function).
 # State limits (region of state space where we approximate the value function).
 d_theta_scale = 1
 d_theta = d_theta_scale * np.pi
@@ -315,7 +314,7 @@ def cartpole_sos_lower_bound(deg):
     return J_star, z
 
 # Note: Lu recommends degree 6, but it takes a few minutes to compute.
-J_star, z = cartpole_sos_lower_bound(deg=6)
+J_star, z = cartpole_sos_lower_bound(deg=4)
 plot_value_function(J_star, z)
 
 
