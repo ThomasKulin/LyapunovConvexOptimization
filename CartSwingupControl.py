@@ -35,8 +35,8 @@ meshcat = StartMeshcat()
 
 if "MOSEKLM_LICENSE_FILE" not in os.environ:
     # If a mosek.lic file has already been uploaded, then simply use it here.
-    if os.path.exists('/tmp/mosek.lic'):
-        os.environ["MOSEKLM_LICENSE_FILE"] = "/tmp/mosek.lic"
+    if os.path.exists('/home/thomas/mosek/mosek.lic'):
+        os.environ["MOSEKLM_LICENSE_FILE"] = '/home/thomas/mosek/mosek.lic'
     else:
         print("stop bein a loooooser and get mosek")
 
@@ -71,6 +71,18 @@ def T(z, dtype=Expression):
     return T
 
 """ Analyzing f, f_val is the normal IP on cart eqns, with denominator kept separate"""
+# def f(z, u, T):
+#     assert len(z) == nz
+#     s = z[1]
+#     c = z[2]
+#     qdot = z[-nq:]
+#     denominator = mc + mp * s**2
+#     f_val = np.zeros(nx, dtype=Expression)
+#     f_val[:nq] = qdot * denominator
+#     f_val[2] = (u + mp * s * (l * qdot[1] ** 2 + g * c))[0]
+#     f_val[3] = ((-u * c - mp * l * qdot[1] ** 2 * c * s - (mc + mp) * g * s) / l)[0]
+#     return T @ f_val, denominator
+
 def f(z, u, T):
     assert len(z) == nz
     s = z[1]
@@ -79,8 +91,8 @@ def f(z, u, T):
     denominator = mc + mp * s**2
     f_val = np.zeros(nx, dtype=Expression)
     f_val[:nq] = qdot * denominator
-    f_val[2] = (u + mp * s * (l * qdot[1] ** 2 + g * c))[0]
-    f_val[3] = ((-u * c - mp * l * qdot[1] ** 2 * c * s - (mc + mp) * g * s) / l)[0]
+    f_val[2] = (u + mp * s * (l * qdot[1] ** 2 - g * c))[0]
+    f_val[3] = ((-u * c - mp * l * qdot[1] ** 2 * c * s + (mc + mp) * g * s) / l)[0]
     return T @ f_val, denominator
 
 
@@ -235,9 +247,7 @@ def cartpole_sos_lower_bound(deg):
     for monomial, coeff in obj.monomial_to_coefficient_map().items():
         s1_deg = monomial.degree(z[1])
         c1_deg = monomial.degree(z[2])
-        monomial_int1 = quad(
-            lambda x: np.sin(x) ** s1_deg * np.cos(x) ** c1_deg, 0, 2 * np.pi
-        )[0]
+        monomial_int1 = quad(lambda x: np.sin(x) ** s1_deg * np.cos(x) ** c1_deg, 0, 2 * np.pi)[0]
         if np.abs(monomial_int1) <= 1e-5:
             monomial_int1 = 0
         cost += monomial_int1 * coeff
@@ -314,7 +324,7 @@ def cartpole_sos_lower_bound(deg):
     return J_star, z
 
 # Note: Lu recommends degree 6, but it takes a few minutes to compute.
-J_star, z = cartpole_sos_lower_bound(deg=4)
+J_star, z = cartpole_sos_lower_bound(deg=2)
 plot_value_function(J_star, z)
 
 
