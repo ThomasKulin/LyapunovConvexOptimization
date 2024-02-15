@@ -8,6 +8,8 @@ from utils import calc_u_opt , save_polynomial, load_polynomial
 from pydrake.all import (
     AddMultibodyPlantSceneGraph,
     BasicVector,
+    Linearize,
+    LinearQuadraticRegulator,
     CommonSolverOption,
     DiagramBuilder,
     Expression,
@@ -29,6 +31,7 @@ from pydrake.all import (
 )
 from pydrake.examples import PendulumParams
 from scipy.integrate import quad
+import sympy as sp
 
 from underactuated import ConfigureParser
 
@@ -91,14 +94,14 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
             assert (st ** 2 + ct ** 2 * sp ** 2 + cp ** 2 * ct ** 2) == 1
 
         qdot = z[-nq:]
-        denominator = ct**2
+        denominator = ct
         f_val = np.zeros(nx, dtype=Expression)
         f_val[:nq] = qdot * denominator
         f_val[4] = u[0] * denominator  # xddot
         f_val[5] = u[1] * denominator  # yddot
         f_val[6] = (g / l * cp * st - phi_dot ** 2 * ct * st - u[0] / l * ct + u[
             1] / l * sp * st) * denominator  # thetaddot
-        f_val[7] = (g / l * sp + 2 * phi_dot * theta_dot * st - u[1] / l * cp)*ct  # phiddot
+        f_val[7] = (g / l * sp + 2 * phi_dot * theta_dot * st - u[1] / l * cp) # phiddot
         return T @ f_val, denominator
 
     def f2(z, T, dtype=Expression):
@@ -119,26 +122,29 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
         return T @ f2_val
 
     # Define new state limits for the updated system
-    d_theta_scale = 1
+    d_theta_scale = 0.4
     d_theta = d_theta_scale * np.pi
-    d_phi_scale = 1
+    d_phi_scale = 0.4
     d_phi = d_phi_scale * np.pi
 
-    x_max = np.array([10, 10, np.pi + d_theta, np.pi + d_phi, 6, 6, 6, 6])
-    x_min = np.array([-10, -10, np.pi - d_theta, np.pi - d_phi, -6, -6, -6, -6])
-    u_max = np.array([1000, 1000])
+    x_max = np.array([1.5, 1.5, d_theta, d_phi, 6, 6, 6, 6])
+    x_min = np.array([-1.5, -1.5, -d_theta, -d_phi, -6, -6, -6, -6])
+    u_max = np.array([30, 30])
 
     # Compute the z_max and z_min based on the updated system setup
     if d_theta < np.pi / 2 and d_phi < np.pi / 2:
         z_max = np.array(
-            [x_max[0], x_max[1], np.sin(x_min[2]), np.cos(x_min[2]), np.sin(x_min[3]), np.cos(x_min[3]), x_max[4],
-             x_max[5], x_max[6], x_max[7]])
+            [x_max[0], x_max[1], np.sin(x_max[2]), 1, np.sin(x_max[3]), 1, x_max[4], x_max[5],
+             x_max[6], x_max[7]])
         z_min = np.array(
-            [x_min[0], x_min[1], np.sin(x_max[2]), -1, np.sin(x_max[3]), -1, x_min[4], x_min[5], x_min[6], x_min[7]])
+            [x_min[0], x_min[1], np.sin(x_min[2]), np.cos(x_min[2]), np.sin(x_min[3]),
+             np.cos(x_min[3]), x_min[4], x_min[5], x_min[6], x_min[7]])
     else:
-        z_max = np.array(
-            [x_max[0], x_max[1], 1, np.cos(x_min[2]), 1, np.cos(x_min[3]), x_max[4], x_max[5], x_max[6], x_max[7]])
-        z_min = np.array([x_min[0], x_min[1], -1, -1, -1, -1, x_min[4], x_min[5], x_min[6], x_min[7]])
+        print("TODO: compute z max for range outside of -pi/2 -> pi/2")
+        assert False
+        # z_max = np.array(
+        #     [x_max[0], x_max[1], 1, np.cos(x_min[2]), 1, np.cos(x_min[3]), x_max[4], x_max[5], x_max[6], x_max[7]])
+        # z_min = np.array([x_min[0], x_min[1], -1, -1, -1, -1, x_min[4], x_min[5], x_min[6], x_min[7]])
 
     # Ensure the transformed state limits are valid
     assert (z_min < z_max).all()
@@ -175,7 +181,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     # Quadratic running cost in augmented state.
     # z = (x, y, st, ct, sp, cp, xdot, ydot, thetadot, phidot)
     # state weighting matrix
-    Q_diag = np.ones(nz)*5 #[0, 0, 20, 20, 20, 20, 0, 0, 1, 1]
+    Q_diag = [1e3, 1e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3]#[200, 200, 2000, 2000, 2000, 2000, 1000, 1000, 1000, 1000]
     Q = np.diag(Q_diag)
     # u = (fx fy)
     # control weighting matrix
@@ -224,10 +230,10 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     f_val, denominator = f(z, u, T_val)
     J_dot = J_expr.Jacobian(z).dot(f_val)
     LHS = J_dot + l_cost(z, u) * denominator  # Lower bound on cost to go V >= -l  -->  V + l >= 0
-    # LHS = J_dot + 1# Relaxed Hamilton jacobian bellman conditions, non optimal, but still lyapunov
+    # LHS = J_dot + 1*denominator# Relaxed Hamilton jacobian bellman conditions, non optimal, but still lyapunov
 
     lam_deg = Polynomial(LHS).TotalDegree() - 2
-    lam_deg = 4
+    lam_deg = 2
 
     # S procedure for st^2 + ct^2 + sp^2 + cp^2 = 2.
     lam = prog.NewFreePolynomial(Variables(zu), lam_deg).ToExpression()
@@ -287,6 +293,41 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     dJdz = J_star.ToExpression().Jacobian(z)
     u_star = -0.5 * Rinv.dot(f2_val.T).dot(dJdz.T)
     print(f"Control Law: {u_star}")
+
+    # Define symbolic variables
+    x, y, theta, phi, x_dot, y_dot, theta_dot, phi_dot = sp.symbols('x y theta phi x_dot y_dot theta_dot phi_dot')
+    s_theta = sp.sin(theta)
+    c_theta = sp.cos(theta)
+    s_phi = sp.sin(phi)
+    c_phi = sp.cos(phi)
+
+    # Parse the string to a SymPy expression
+    fx = sp.sympify(u_star[0])
+    fy = sp.sympify(u_star[1])
+    # Map z matrix parameters to symbolic representations
+    fx_str_sub = fx.__str__().replace("z(0)", "x") \
+        .replace("z(1)", "y") \
+        .replace("z(2)", "sin(theta)") \
+        .replace("z(3)", "cos(theta)") \
+        .replace("z(4)", "sin(phi)") \
+        .replace("z(5)", "cos(phi)") \
+        .replace("z(6)", "x_dot") \
+        .replace("z(7)", "y_dot") \
+        .replace("z(8)", "theta_dot") \
+        .replace("z(9)", "phi_dot")
+    fy_str_sub = fy.__str__().replace("z(0)", "x") \
+        .replace("z(1)", "y") \
+        .replace("z(2)", "sin(theta)") \
+        .replace("z(3)", "cos(theta)") \
+        .replace("z(4)", "sin(phi)") \
+        .replace("z(5)", "cos(phi)") \
+        .replace("z(6)", "x_dot") \
+        .replace("z(7)", "y_dot") \
+        .replace("z(8)", "theta_dot") \
+        .replace("z(9)", "phi_dot")
+    print(f"fx: {fx_str_sub}")
+    print(f"fy: {fy_str_sub}")
+
     if visualize:
         plot_value_function(J_star, z, z_max, plot_states="xtheta", u_index=0)
 
@@ -359,16 +400,16 @@ def lqr(Q, nz, nu, mp, l):
     B = np.zeros([nz, nu])
     A[0, 3] = 1
     A[1, -1] = -1
-    A[3, 1] = -mp*g/mc
-    A[4, 1] = -g*(mc+mp)/(l*mc)
-    B[3, :] = 1/mc
-    B[4, :] = 1/(l*mc)
+    A[3, 1] = -mp*g
+    A[4, 1] = -g*(mp)
+    B[3, :] = 1
+    B[4, :] = 1
     F = np.array([0, 0, -1, 0, 0])
     R = np.diag([1])
     K, S = LinearQuadraticRegulator(A, B, Q, R, F=F.reshape(1, nz))
     return np.squeeze(K), S
 
 
-J_star, z = spherical_ip_sos_lower_bound(4, visualize=True, actuator_saturate=False)
-print(J_star)
+J_star, z = spherical_ip_sos_lower_bound(2, visualize=True, actuator_saturate=False)
+# print(J_star)
 
