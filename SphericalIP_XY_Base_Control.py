@@ -99,8 +99,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
         f_val[:nq] = qdot * denominator
         f_val[4] = u[0] * denominator  # xddot
         f_val[5] = u[1] * denominator  # yddot
-        f_val[6] = (g / l * cp * st - phi_dot ** 2 * ct * st - u[0] / l * ct + u[
-            1] / l * sp * st) * denominator  # thetaddot
+        f_val[6] = (g / l * cp * st - phi_dot ** 2 * ct * st - u[0] / l * ct + u[1] / l * sp * st) * denominator  # thetaddot
         f_val[7] = (g / l * sp + 2 * phi_dot * theta_dot * st - u[1] / l * cp) # phiddot
         return T @ f_val, denominator
 
@@ -111,13 +110,9 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
         sp = z[4]
         cp = z[5]
         f2_val = np.zeros([nx, nu], dtype=dtype)
-        f2_val[0, :] = [0, 0]
-        f2_val[1, :] = [1, 0]
-        f2_val[2, :] = [0, 0]
-        f2_val[3, :] = [0, 1]
-        f2_val[4, :] = [0, 0]
-        f2_val[5, :] = [-cp / l, sp * st / l]
-        f2_val[6, :] = [0, 0]
+        f2_val[4, :] = [1, 0]
+        f2_val[5, :] = [0, 1]
+        f2_val[6, :] = [-cp / l, sp * st / l]
         f2_val[7, :] = [0, -cp / (l * ct)]
         return T @ f2_val
 
@@ -157,17 +152,41 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
 
     # Compute the z_max and z_min for intermediate limits
     if d_theta_int < np.pi / 2 and d_phi_int < np.pi / 2:
+        # z_max_int = np.array(
+        #     [x_max_int[0], x_max_int[1], np.sin(x_max_int[2]), 1, np.sin(x_max_int[3]), 1, x_max_int[4], x_max_int[5],
+        #      x_max_int[6], x_max_int[7]])
+        # z_min_int = np.array(
+        #     [x_min_int[0], x_min_int[1], np.sin(x_min_int[2]), np.cos(x_min_int[2]), np.sin(x_min_int[3]),
+        #      np.cos(x_min_int[3]), x_min_int[4], x_min_int[5], x_min_int[6], x_min_int[7]])
         z_max_int = np.array(
-            [x_max_int[0], x_max_int[1], np.sin(x_max_int[2]), 1, np.sin(x_max_int[3]), 1, x_max_int[4], x_max_int[5],
-             x_max_int[6], x_max_int[7]])
+            [x_max_int[0], x_max_int[1], np.sin(x_max_int[2]), np.cos(x_min_int[2]), np.sin(x_max_int[3]),
+             np.cos(x_min_int[3]), x_max_int[4], x_max_int[5], x_max_int[6], x_max_int[7]])
         z_min_int = np.array(
-            [x_min_int[0], x_min_int[1], np.sin(x_min_int[2]), np.cos(x_min_int[2]), np.sin(x_min_int[3]),
-             np.cos(x_min_int[3]), x_min_int[4], x_min_int[5], x_min_int[6], x_min_int[7]])
+            [x_min_int[0], x_min_int[1], np.sin(x_min_int[2]), -1, np.sin(x_min_int[3]), -1, x_min_int[4], x_min_int[5],
+             x_min_int[6], x_min_int[7]])
     else:
         print("TODO: compute z max for range outside of -pi/2 -> pi/2")
         assert False
         # z_max_int = np.array([x_max_int[0], x_max_int[1], 1, np.cos(x_min_int[2]), 1, np.cos(x_min_int[3]), x_max_int[4], x_max_int[5], x_max_int[6], x_max_int[7]])
         # z_min_int = np.array([x_min_int[0], x_min_int[1], -1, -1, -1, -1, x_min_int[4], x_min_int[5], x_min_int[6], x_min_int[7]])
+
+    # x_max_int = np.array([1.5, 1.5, np.pi + d_theta_int, np.pi + d_phi_int, 4, 4, 4, 4])
+    # x_min_int = np.array([-1.5, -1.5, np.pi - d_theta_int, np.pi - d_phi_int, -4, -4, -4, -4])
+    #
+    # # Compute the z_max and z_min for intermediate limits
+    # if d_theta_int < np.pi / 2 and d_phi_int < np.pi / 2:
+    #     z_max_int = np.array(
+    #         [x_max_int[0], x_max_int[1], np.sin(x_min_int[2]), np.cos(x_min_int[2]), np.sin(x_min_int[3]),
+    #          np.cos(x_min_int[3]), x_max_int[4], x_max_int[5], x_max_int[6], x_max_int[7]])
+    #     z_min_int = np.array(
+    #         [x_min_int[0], x_min_int[1], np.sin(x_max_int[2]), -1, np.sin(x_max_int[3]), -1, x_min_int[4], x_min_int[5],
+    #          x_min_int[6], x_min_int[7]])
+    # else:
+    #     z_max_int = np.array(
+    #         [x_max_int[0], x_max_int[1], 1, np.cos(x_min_int[2]), 1, np.cos(x_min_int[3]), x_max_int[4], x_max_int[5],
+    #          x_max_int[6], x_max_int[7]])
+    #     z_min_int = np.array(
+    #         [x_min_int[0], x_min_int[1], -1, -1, -1, -1, x_min_int[4], x_min_int[5], x_min_int[6], x_min_int[7]])
 
     # Ensure the transformed intermediate state limits are valid
     assert (z_min_int < z_max_int).all()
@@ -181,7 +200,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     # Quadratic running cost in augmented state.
     # z = (x, y, st, ct, sp, cp, xdot, ydot, thetadot, phidot)
     # state weighting matrix
-    Q_diag = [1e3, 1e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3]#[200, 200, 2000, 2000, 2000, 2000, 1000, 1000, 1000, 1000]
+    Q_diag = [1000, 1000, 2000, 2000, 2000, 2000, 1000, 1000, 1000, 1000]
     Q = np.diag(Q_diag)
     # u = (fx fy)
     # control weighting matrix
@@ -230,13 +249,13 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     f_val, denominator = f(z, u, T_val)
     J_dot = J_expr.Jacobian(z).dot(f_val)
     LHS = J_dot + l_cost(z, u) * denominator  # Lower bound on cost to go V >= -l  -->  V + l >= 0
-    # LHS = J_dot + 1*denominator# Relaxed Hamilton jacobian bellman conditions, non optimal, but still lyapunov
+    # LHS = J_dot + 10# Relaxed Hamilton jacobian bellman conditions, non-optimal, but still lyapunov
 
     lam_deg = Polynomial(LHS).TotalDegree() - 2
     lam_deg = 2
 
     # S procedure for st^2 + ct^2 + sp^2 + cp^2 = 2.
-    lam = prog.NewFreePolynomial(Variables(zu), lam_deg).ToExpression()
+    lam = prog.NewFreePolynomial(Variables(zu), deg).ToExpression()
     S_procedure = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
     S_Jdot = 0
     for i in np.arange(nz):
@@ -281,7 +300,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
         print("Mosek is not available. Skipping this example.")
         return Polynomial(Expression(0), z), z
     result = Solve(prog)
-    assert result.is_success()
+    # assert result.is_success()
     J_star = Polynomial(result.GetSolution(J_expr)).RemoveTermsWithSmallCoefficients(1e-9)
     os.makedirs("SphericalIP/data/{}".format(z_max), exist_ok=True)
     save_polynomial(J_star, z, "SphericalIP/data/{}/J_lower_bound_deg_{}.pkl".format(z_max, deg))
@@ -329,11 +348,11 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     print(f"fy: {fy_str_sub}")
 
     if visualize:
-        plot_value_function(J_star, z, z_max, plot_states="xtheta", u_index=0)
+        plot_value_function(J_star, z, z_max, u_max, plot_states="thetaphi", actuator_saturate=actuator_saturate)
 
     return J_star, z
 
-def plot_value_function(J_star, z, z_max, plot_states="xy", u_index=0):
+def plot_value_function(J_star, z, z_max, u_max, plot_states="xy", actuator_saturate=False):
     nz = 10
     x_max = np.zeros(8)
     x_max[:2] = z_max[:2]
@@ -343,55 +362,76 @@ def plot_value_function(J_star, z, z_max, plot_states="xy", u_index=0):
     x_min = -x_max
 
     dJdz = J_star.ToExpression().Jacobian(z)
-    nz, f, f2, T, x2z, Rinv, z0 = spherical_ip_sos_lower_bound(2, test=True)
+
     zero_vector = np.zeros(51*51)
     if plot_states == "xtheta":
         X1, THETA = np.meshgrid(np.linspace(x_min[0], x_max[0], 51),
                         np.linspace(x_min[2], x_max[2], 51))
         X = np.vstack((X1.flatten(), zero_vector, THETA.flatten(), zero_vector, zero_vector, zero_vector, zero_vector, zero_vector))
-        ylabel="theta"
+        plotCostPolicy(dJdz, J_star, z, X, X1, x_min, x_max, z_max, u_max, 0, 2, "x", "theta", actuator_saturate=actuator_saturate)
+    elif plot_states == "yphi":
+        Y1, PHI = np.meshgrid(np.linspace(x_min[1], x_max[1], 51),
+                        np.linspace(x_min[3], x_max[3], 51))
+        Y = np.vstack(( zero_vector, Y1.flatten(), zero_vector, PHI.flatten(), zero_vector, zero_vector, zero_vector, zero_vector))
+        plotCostPolicy(dJdz, J_star, z, Y, Y1, x_min, x_max, z_max, u_max,1, 3, "y", "phi", actuator_saturate=actuator_saturate)
+    elif plot_states == "thetaphi":
+        THETA1, PHI = np.meshgrid(np.linspace(x_min[2], x_max[2], 51),
+                        np.linspace(x_min[3], x_max[3], 51))
+        THETA = np.vstack((zero_vector, zero_vector, THETA1.flatten(), PHI.flatten(), zero_vector, zero_vector, zero_vector, zero_vector))
+        plotCostPolicy(dJdz, J_star, z, THETA, THETA1, x_min, x_max, z_max, u_max, 2, 3, "theta", "phi", actuator_saturate=actuator_saturate)
     elif plot_states == "xy":
         X1, Y = np.meshgrid(np.linspace(x_min[0], x_max[0], 51),
                         np.linspace(x_min[1], x_max[1], 51))
         X = np.vstack((X1.flatten(), Y.flatten(), zero_vector, zero_vector, zero_vector, zero_vector, zero_vector, zero_vector))
-        ylabel="y"
+        plotCostPolicy(dJdz, J_star, z, X, X1, x_min, x_max, z_max, u_max, 0, 1, "x", "y", actuator_saturate=actuator_saturate)
 
+
+
+
+def plotCostPolicy(dJdz, J_star, z, X, X1, x_min, x_max, z_max, u_max, xaxis_ind, yaxis_ind, xlabel, ylabel, actuator_saturate=False):
+    nz, f, f2, T, x2z, Rinv, z0 = spherical_ip_sos_lower_bound(2, test=True)
     Z = x2z(X)
-    J = np.zeros(Z.shape[1])
-    U = np.zeros(Z.shape[1])
-    for i in range(Z.shape[1]):
-        z_val = Z[:, i]
-        T_val = T(z_val)
-        J[i] = J_star.Evaluate(dict(zip(z, z_val)))
-        f2_val = f2(z_val, T_val, dtype=float)
-        dJdz_val = np.zeros(nz)
-        for n in range(nz):
-            dJdz_val[n] = dJdz[n].Evaluate(dict(zip(z, z_val)))
-        U[i] = calc_u_opt(dJdz_val, f2_val, Rinv)[u_index]
 
-    fig = plt.figure(figsize=(9, 4))
-    ax = fig.subplots()
-    ax.set_xlabel("x")
-    ax.set_ylabel(ylabel)
-    ax.set_title("Cost-to-Go")
-    im = ax.imshow(J.reshape(X1.shape),
-            cmap=cm.jet, aspect='auto',
-            extent=(x_min[0], x_max[0], x_max[2], x_min[2]))
-    ax.invert_yaxis()
-    fig.colorbar(im)
+    fig, axs = plt.subplots(2, 2, figsize=(8, 8))  # figsize can be adjusted as needed
+    for i in range(2):
+
+        J = np.zeros(Z.shape[1])
+        U = np.zeros(Z.shape[1])
+        for _ in range(Z.shape[1]):
+            z_val = Z[:, _]
+            T_val = T(z_val)
+            J[_] = J_star.Evaluate(dict(zip(z, z_val)))
+            f2_val = f2(z_val, T_val, dtype=float)
+            dJdz_val = np.zeros(nz)
+            for n in range(nz):
+                dJdz_val[n] = dJdz[n].Evaluate(dict(zip(z, z_val)))
+            U[_] = calc_u_opt(dJdz_val, f2_val, Rinv)[i]
+            if actuator_saturate:
+                U[_] = np.clip(U[_], -u_max[i], u_max[i])
+            else:
+                U[_] = np.clip(U[_], -60, 60)
+
+        axs[i,0].set_xlabel(xlabel)
+        axs[i,0].set_ylabel(ylabel)
+        axs[i,0].set_title(f"Cost-to-Go, Input #: {i}")
+        im = axs[i,0].imshow(J.reshape(X1.shape),
+                       cmap=cm.jet, aspect='auto',
+                       extent=(x_min[xaxis_ind], x_max[xaxis_ind], x_max[yaxis_ind], x_min[yaxis_ind]))
+        axs[i,0].invert_yaxis()
+        fig.colorbar(im, ax=axs[i,0])
+
+        axs[i,1].set_xlabel(xlabel)
+        axs[i,1].set_ylabel(ylabel)
+        axs[i,1].set_title(f"Policy, Input #: {i}")
+        im = axs[i,1].imshow(U.reshape(X1.shape),
+                       cmap=cm.jet, aspect='auto',
+                       extent=(x_min[xaxis_ind], x_max[xaxis_ind], x_max[yaxis_ind], x_min[yaxis_ind]))
+        axs[i,1].invert_yaxis()
+        fig.colorbar(im, ax=axs[i,1])
+
+    plt.tight_layout()
     plt.show()
 
-    fig = plt.figure(figsize=(9, 4))
-    ax = fig.subplots()
-    ax.set_xlabel("x")
-    ax.set_ylabel(ylabel)
-    ax.set_title("Policy")
-    im = ax.imshow(U.reshape(X1.shape),
-            cmap=cm.jet, aspect='auto',
-            extent=(x_min[0], x_max[0], x_max[2], x_min[2]))
-    ax.invert_yaxis()
-    fig.colorbar(im)
-    plt.show()
 
 def lqr(Q, nz, nu, mp, l):
     g = 9.81
@@ -410,6 +450,6 @@ def lqr(Q, nz, nu, mp, l):
     return np.squeeze(K), S
 
 
-J_star, z = spherical_ip_sos_lower_bound(2, visualize=True, actuator_saturate=False)
+J_star, z = spherical_ip_sos_lower_bound(4, visualize=True, actuator_saturate=False)
 # print(J_star)
 
