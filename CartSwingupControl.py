@@ -88,7 +88,7 @@ def f(z, u, T):
     s = z[1]
     c = z[2]
     qdot = z[-nq:]
-    denominator = mc + mp * s**2
+    denominator = (mc + mp * s**2)
     f_val = np.zeros(nx, dtype=Expression)
     f_val[:nq] = qdot * denominator
     f_val[2] = (u + mp * s * (l * qdot[1] ** 2 - g * c))[0]
