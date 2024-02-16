@@ -117,9 +117,9 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
         return T @ f2_val
 
     # Define new state limits for the updated system
-    d_theta_scale = 0.4
+    d_theta_scale = 0.25
     d_theta = d_theta_scale * np.pi
-    d_phi_scale = 0.4
+    d_phi_scale = 0.25
     d_phi = d_phi_scale * np.pi
 
     x_max = np.array([1.5, 1.5, d_theta, d_phi, 20, 20, 20, 20])
@@ -145,8 +145,8 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     assert (z_min < z_max).all()
 
     # Intermediate state limits
-    d_theta_int = 0.4 * np.pi
-    d_phi_int = 0.4 * np.pi
+    d_theta_int = 0.25 * np.pi
+    d_phi_int = 0.25 * np.pi
     x_max_int = np.array([1.5, 1.5, d_theta_int, d_phi_int, 20, 20, 20, 20])
     x_min_int = np.array([-1.5, -1.5, -d_theta_int, -d_phi_int, -20, -20, -20, -20])
 
@@ -158,35 +158,12 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
         z_min_int = np.array(
             [x_min_int[0], x_min_int[1], np.sin(x_min_int[2]), np.cos(x_min_int[2]), np.sin(x_min_int[3]),
              np.cos(x_min_int[3]), x_min_int[4], x_min_int[5], x_min_int[6], x_min_int[7]])
-        # z_max_int = np.array(
-        #     [x_max_int[0], x_max_int[1], np.sin(x_max_int[2]), np.cos(x_min_int[2]), np.sin(x_max_int[3]),
-        #      np.cos(x_min_int[3]), x_max_int[4], x_max_int[5], x_max_int[6], x_max_int[7]])
-        # z_min_int = np.array(
-        #     [x_min_int[0], x_min_int[1], np.sin(x_min_int[2]), -1, np.sin(x_min_int[3]), -1, x_min_int[4], x_min_int[5],
-        #      x_min_int[6], x_min_int[7]])
     else:
         print("TODO: compute z max for range outside of -pi/2 -> pi/2")
         assert False
         # z_max_int = np.array([x_max_int[0], x_max_int[1], 1, np.cos(x_min_int[2]), 1, np.cos(x_min_int[3]), x_max_int[4], x_max_int[5], x_max_int[6], x_max_int[7]])
         # z_min_int = np.array([x_min_int[0], x_min_int[1], -1, -1, -1, -1, x_min_int[4], x_min_int[5], x_min_int[6], x_min_int[7]])
 
-    # x_max_int = np.array([1.5, 1.5, np.pi + d_theta_int, np.pi + d_phi_int, 4, 4, 4, 4])
-    # x_min_int = np.array([-1.5, -1.5, np.pi - d_theta_int, np.pi - d_phi_int, -4, -4, -4, -4])
-    #
-    # # Compute the z_max and z_min for intermediate limits
-    # if d_theta_int < np.pi / 2 and d_phi_int < np.pi / 2:
-    #     z_max_int = np.array(
-    #         [x_max_int[0], x_max_int[1], np.sin(x_min_int[2]), np.cos(x_min_int[2]), np.sin(x_min_int[3]),
-    #          np.cos(x_min_int[3]), x_max_int[4], x_max_int[5], x_max_int[6], x_max_int[7]])
-    #     z_min_int = np.array(
-    #         [x_min_int[0], x_min_int[1], np.sin(x_max_int[2]), -1, np.sin(x_max_int[3]), -1, x_min_int[4], x_min_int[5],
-    #          x_min_int[6], x_min_int[7]])
-    # else:
-    #     z_max_int = np.array(
-    #         [x_max_int[0], x_max_int[1], 1, np.cos(x_min_int[2]), 1, np.cos(x_min_int[3]), x_max_int[4], x_max_int[5],
-    #          x_max_int[6], x_max_int[7]])
-    #     z_min_int = np.array(
-    #         [x_min_int[0], x_min_int[1], -1, -1, -1, -1, x_min_int[4], x_min_int[5], x_min_int[6], x_min_int[7]])
 
     # Ensure the transformed intermediate state limits are valid
     assert (z_min_int < z_max_int).all()
@@ -252,10 +229,10 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     # LHS = J_dot + 10# Relaxed Hamilton jacobian bellman conditions, non-optimal, but still lyapunov
 
     lam_deg = Polynomial(LHS).TotalDegree() - 2
-    lam_deg = 2
-
+    lam_deg = 4
+    ring_deg = 4
     # S procedure for st^2 + ct^2 + sp^2 + cp^2 = 2.
-    lam = prog.NewFreePolynomial(Variables(zu), deg).ToExpression()
+    lam = prog.NewFreePolynomial(Variables(zu), ring_deg).ToExpression()
     S_procedure = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
     S_Jdot = 0
     for i in np.arange(nz):
@@ -272,7 +249,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
 
     # Enforce that value function is Positive Definite
     S_J = 0
-    lam_r = prog.NewFreePolynomial(Variables(z), deg).ToExpression()
+    lam_r = prog.NewFreePolynomial(Variables(z), ring_deg).ToExpression()
     S_r = lam_r * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)  # S-procedure again
     for i in np.arange(nz):
         lam = prog.NewSosPolynomial(Variables(z), deg)[0].ToExpression()
@@ -346,8 +323,6 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
         .replace("z(9)", "phi_dot")
     print(f"fx: {fx_str_sub}")
     print(f"fy: {fy_str_sub}")
-
-    testU(J_star, T, f2, z, nz, dJdz, Rinv, np.array([0, 0, 0, 1, 0, 1, 0, 0, 0, 0]))
 
     if visualize:
         plot_value_function(J_star, z, z_max, u_max, plot_states="thetaphi", actuator_saturate=actuator_saturate)
@@ -451,19 +426,7 @@ def lqr(Q, nz, nu, mp, l):
     K, S = LinearQuadraticRegulator(A, B, Q, R, F=F.reshape(1, nz))
     return np.squeeze(K), S
 
-def testU(J_star, T, f2, z, nz, dJdz, Rinv, Z):
-    J = np.zeros(Z.shape)
-    U = np.zeros(Z.shape)
-    z_val = Z
-    T_val = T(z_val)
-    J = J_star.Evaluate(dict(zip(z, z_val)))
-    f2_val = f2(z_val, T_val, dtype=float)
-    dJdz_val = np.zeros(nz)
-    for n in range(nz):
-        dJdz_val[n] = dJdz[n].Evaluate(dict(zip(z, z_val)))
-    U = calc_u_opt(dJdz_val, f2_val, Rinv)
-    return U
 
-J_star, z = spherical_ip_sos_lower_bound(2, visualize=True, actuator_saturate=False)
+J_star, z = spherical_ip_sos_lower_bound(6, visualize=True, actuator_saturate=False)
 # print(J_star)
 
