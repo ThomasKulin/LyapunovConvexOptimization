@@ -155,7 +155,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     J_expr = J.ToExpression()
 
     if plot_saved:
-        filename = "SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/J_lower_bound_deg_4"
+        filename = "SphericalIP/data/test/J_lower_bound_deg_2"
         J_star = load_polynomial(z, filename+".pkl")
         Rinv = np.linalg.inv(R)
         T_val = T(z)
@@ -203,14 +203,14 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     S_sphere = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
     S_Jdot = 0
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(zu), ring_deg)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
+        lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
         S_Jdot += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # negative inside the range of z-space we are defining to be locally stable
 
     # Enforce Input constraint
     u_min = -u_max
     if actuator_saturate:
         for i in range(nu):
-            lam = prog.NewSosPolynomial(Variables(zu), ring_deg)[0].ToExpression()
+            lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()
             S_Jdot += lam * (u[i] - u_max[i]) * (u[i] - u_min[i])
     prog.AddSosConstraint(LHS + S_sphere + S_Jdot)
 
@@ -219,7 +219,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     lam_r = prog.NewFreePolynomial(Variables(z), deg).ToExpression()
     S_r = lam_r * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)  # S-procedure again
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(z), deg)[0].ToExpression()
+        lam = prog.NewSosPolynomial(Variables(z), deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()
         S_J += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # +ve when z > zmax or z < zmin, -ve inside z bounds
     prog.AddSosConstraint(J_expr + S_J + S_r)
 
@@ -375,4 +375,14 @@ def uToStr(U, file=None):
             text_file.write(fx_str_sub+"\n"+fy_str_sub)
 
 
-J_star, z = spherical_ip_sos_lower_bound(2, visualize=True, actuator_saturate=False, plot_saved=False)
+    def roa():
+        sys = SymbolicVectorSystem(state=[x], dynamics=[-x + x**3])
+        context = sys.CreateDefaultContext()
+        V = RegionOfAttraction(system=sys, context=context)
+
+        print("Verified that " + str(V) + " < 1 is in the region of attraction.")
+
+
+
+
+J_star, z = spherical_ip_sos_lower_bound(4, visualize=True, actuator_saturate=False, plot_saved=False)
