@@ -203,25 +203,25 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     S_sphere = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
     S_Jdot = 0
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
+        lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kDsos)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
         S_Jdot += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # negative inside the range of z-space we are defining to be locally stable
 
     # Enforce Input constraint
     u_min = -u_max
     if actuator_saturate:
         for i in range(nu):
-            lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()
+            lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kDsos)[0].ToExpression()
             S_Jdot += lam * (u[i] - u_max[i]) * (u[i] - u_min[i])
-    prog.AddSosConstraint(LHS + S_sphere + S_Jdot)
+    prog.AddSosConstraint(LHS + S_sphere + S_Jdot, type=prog.NonnegativePolynomial.kDsos)
 
     # Enforce that value function is Positive Definite
     S_J = 0
     lam_r = prog.NewFreePolynomial(Variables(z), deg).ToExpression()
     S_r = lam_r * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)  # S-procedure again
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(z), deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()
+        lam = prog.NewSosPolynomial(Variables(z), deg, type=prog.NonnegativePolynomial.kDsos)[0].ToExpression()
         S_J += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # +ve when z > zmax or z < zmin, -ve inside z bounds
-    prog.AddSosConstraint(J_expr + S_J + S_r)
+    prog.AddSosConstraint(J_expr + S_J + S_r, type=prog.NonnegativePolynomial.kDsos)
 
     # J(z0) = 0.
     J0 = J_expr.EvaluatePartial(dict(zip(z, z0)))
