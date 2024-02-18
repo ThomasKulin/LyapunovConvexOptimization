@@ -2,6 +2,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
+import re
 import os
 from matplotlib import cm
 from utils import calc_u_opt , save_polynomial, load_polynomial
@@ -46,7 +47,7 @@ if "MOSEKLM_LICENSE_FILE" not in os.environ:
 
 print(MosekSolver().enabled())
 
-def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=False, test=False, actuator_saturate=False):
+def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=False, test=False, actuator_saturate=False, plot_saved=False):
     nz = 10
     nq = 4
     nx = 2 * nq
@@ -116,72 +117,26 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
         f2_val[7, :] = [0, -cp / (l * ct)]
         return T @ f2_val
 
-    # Define new state limits for the updated system
-    d_theta_scale = 0.25
-    d_theta = d_theta_scale * np.pi
-    d_phi_scale = 0.25
-    d_phi = d_phi_scale * np.pi
-
-    x_max = np.array([1.5, 1.5, d_theta, d_phi, 20, 20, 20, 20])
-    x_min = np.array([-1.5, -1.5, -d_theta, -d_phi, -20, -20, -20, -20])
+    # Define State Limits
     u_max = np.array([30, 30])
-
-    # Compute the z_max and z_min based on the updated system setup
-    if d_theta < np.pi / 2 and d_phi < np.pi / 2:
-        z_max = np.array(
-            [x_max[0], x_max[1], np.sin(x_max[2]), 1, np.sin(x_max[3]), 1, x_max[4], x_max[5],
-             x_max[6], x_max[7]])
-        z_min = np.array(
-            [x_min[0], x_min[1], np.sin(x_min[2]), np.cos(x_min[2]), np.sin(x_min[3]),
-             np.cos(x_min[3]), x_min[4], x_min[5], x_min[6], x_min[7]])
-    else:
-        print("TODO: compute z max for range outside of -pi/2 -> pi/2")
-        assert False
-        # z_max = np.array(
-        #     [x_max[0], x_max[1], 1, np.cos(x_min[2]), 1, np.cos(x_min[3]), x_max[4], x_max[5], x_max[6], x_max[7]])
-        # z_min = np.array([x_min[0], x_min[1], -1, -1, -1, -1, x_min[4], x_min[5], x_min[6], x_min[7]])
-
-    # Ensure the transformed state limits are valid
+    z_max = np.array([1.5, 1.5, np.sin(np.pi/2), 1, np.sin(np.pi / 2), 1, 4, 4, 3, 3])
+    z_min = np.array([-1.5, -1.5, -np.sin(np.pi/2), 0, -np.sin(np.pi/2), 0, -4, -4, -3, -3])
     assert (z_min < z_max).all()
-
-    # Intermediate state limits
-    d_theta_int = 0.25 * np.pi
-    d_phi_int = 0.25 * np.pi
-    x_max_int = np.array([1.5, 1.5, d_theta_int, d_phi_int, 20, 20, 20, 20])
-    x_min_int = np.array([-1.5, -1.5, -d_theta_int, -d_phi_int, -20, -20, -20, -20])
-
-    # Compute the z_max and z_min for intermediate limits
-    if d_theta_int < np.pi / 2 and d_phi_int < np.pi / 2:
-        z_max_int = np.array(
-            [x_max_int[0], x_max_int[1], np.sin(x_max_int[2]), 1, np.sin(x_max_int[3]), 1, x_max_int[4], x_max_int[5],
-             x_max_int[6], x_max_int[7]])
-        z_min_int = np.array(
-            [x_min_int[0], x_min_int[1], np.sin(x_min_int[2]), np.cos(x_min_int[2]), np.sin(x_min_int[3]),
-             np.cos(x_min_int[3]), x_min_int[4], x_min_int[5], x_min_int[6], x_min_int[7]])
-    else:
-        print("TODO: compute z max for range outside of -pi/2 -> pi/2")
-        assert False
-        # z_max_int = np.array([x_max_int[0], x_max_int[1], 1, np.cos(x_min_int[2]), 1, np.cos(x_min_int[3]), x_max_int[4], x_max_int[5], x_max_int[6], x_max_int[7]])
-        # z_min_int = np.array([x_min_int[0], x_min_int[1], -1, -1, -1, -1, x_min_int[4], x_min_int[5], x_min_int[6], x_min_int[7]])
-
-
-    # Ensure the transformed intermediate state limits are valid
-    assert (z_min_int < z_max_int).all()
 
     # Equilibrium point in both the system coordinates.
     # x = (x, y, theta, phi, xdot, ydot, thetadot, phidot)
-    x0 = np.array([0, 0, 0, 0, 0, 0, 0, 0])
+    x0 = np.zeros(nx)
     z0 = x2z(x0)
     z0[np.abs(z0) <= 1e-6] = 0
 
     # Quadratic running cost in augmented state.
     # z = (x, y, st, ct, sp, cp, xdot, ydot, thetadot, phidot)
     # state weighting matrix
-    Q_diag = [00, 00, 200, 200, 200, 200, 100, 100, 100, 100]
+    Q_diag = [0.01, 0.01, 20000, 20000, 20000, 20000, 1, 1, 1, 1]
     Q = np.diag(Q_diag)
     # u = (fx fy)
     # control weighting matrix
-    R = np.diag([1, 1])
+    R = np.array([[0.1, 0.0], [0.0, 0.1]])
 
     def l_cost(z, u):
         return (z - z0).dot(Q).dot(z - z0) + u.dot(R).dot(u)
@@ -198,24 +153,37 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     J = prog.NewFreePolynomial(Variables(z), deg)
     J_expr = J.ToExpression()
 
+    if plot_saved:
+        filename = "SphericalIP/data/test/J_lower_bound_deg_2"
+        J_star = load_polynomial(z, filename+".pkl")
+        Rinv = np.linalg.inv(R)
+        T_val = T(z)
+        f2_val = f2(z, T_val)
+        dJdz = J_star.Jacobian(z)
+        u_star = -0.5 * Rinv.dot(f2_val.T).dot(dJdz.T)
+        uToStr(u_star, filename+".txt")
+        plot_value_function(J_star, z, z_max, u_max, plot_states="thetaphi", actuator_saturate=False)
+        return 0
+
+
     xythetaphi_idx = [0, 1, 6, 7, 8, 9]
 
     # Maximize volume beneath the value function, integrating over the ring
     # s^2 + c^2 = 1.
     obj = J
     for i in xythetaphi_idx:
-        obj = obj.Integrate(z[i], z_min_int[i], z_max_int[i])
+        obj = obj.Integrate(z[i], z_min[i], z_max[i])
     cost = 0
     for monomial, coeff in obj.monomial_to_coefficient_map().items():
         s1_deg = monomial.degree(z[2])  # sin(theta)
         c1_deg = monomial.degree(z[3])  # cos(theta)
         s2_deg = monomial.degree(z[4])  # sin(phi)
         c2_deg = monomial.degree(z[5])  # cos(phi)
-        monomial_int = quad(lambda x: np.sin(x) ** s1_deg * np.cos(x) ** c1_deg * np.sin(x) ** s2_deg * np.cos(x) ** c2_deg, 0, 2 * np.pi)[0]
+        monomial_int = quad(lambda x: np.sin(x) ** s1_deg * np.cos(x) ** c1_deg * np.sin(x) ** s2_deg * np.cos(x) ** c2_deg, -np.pi/2, np.pi/2)[0]
+        # monomial_int = quad(lambda x: np.sin(x) ** s2_deg * np.cos(x) ** c2_deg, -np.pi/2, np.pi/2)[0]
         if np.abs(monomial_int) <= 1e-5:
             monomial_int1 = 0
         cost += monomial_int*coeff
-
     poly = Polynomial(cost)
     cost_coeff = [c.Evaluate() for c in poly.monomial_to_coefficient_map().values()]
     # Make the numerics better
@@ -226,59 +194,50 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     f_val, denominator = f(z, u, T_val)
     J_dot = J_expr.Jacobian(z).dot(f_val)
     LHS = J_dot + l_cost(z, u) * denominator  # Lower bound on cost to go V >= -l  -->  V + l >= 0
-    # LHS = J_dot + 10# Relaxed Hamilton jacobian bellman conditions, non-optimal, but still lyapunov
+    # LHS = J_dot + 10*denominator# Relaxed Hamilton jacobian bellman conditions, non-optimal, but still lyapunov
 
-    lam_deg = Polynomial(LHS).TotalDegree() - 2
-    lam_deg = 4
     ring_deg = 4
     # S procedure for st^2 + ct^2 + sp^2 + cp^2 = 2.
     lam = prog.NewFreePolynomial(Variables(zu), ring_deg).ToExpression()
-    S_procedure = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
+    S_sphere = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
     S_Jdot = 0
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(zu), lam_deg)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
+        lam = prog.NewSosPolynomial(Variables(zu), ring_deg)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
         S_Jdot += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # negative inside the range of z-space we are defining to be locally stable
 
     # Enforce Input constraint
     u_min = -u_max
     if actuator_saturate:
         for i in range(nu):
-            lam = prog.NewSosPolynomial(Variables(zu), lam_deg)[0].ToExpression()
+            lam = prog.NewSosPolynomial(Variables(zu), ring_deg)[0].ToExpression()
             S_Jdot += lam * (u[i] - u_max[i]) * (u[i] - u_min[i])
-    prog.AddSosConstraint(LHS + S_procedure + S_Jdot)
+    prog.AddSosConstraint(LHS + S_sphere + S_Jdot)
 
     # Enforce that value function is Positive Definite
     S_J = 0
-    lam_r = prog.NewFreePolynomial(Variables(z), ring_deg).ToExpression()
+    lam_r = prog.NewFreePolynomial(Variables(z), deg).ToExpression()
     S_r = lam_r * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)  # S-procedure again
     for i in np.arange(nz):
         lam = prog.NewSosPolynomial(Variables(z), deg)[0].ToExpression()
         S_J += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # +ve when z > zmax or z < zmin, -ve inside z bounds
     prog.AddSosConstraint(J_expr + S_J + S_r)
 
-
     # J(z0) = 0.
     J0 = J_expr.EvaluatePartial(dict(zip(z, z0)))
     prog.AddLinearConstraint(J0 == 0)
-
-    # J(z_max(or min)) = mgl NOT WORKING AS IS
-    J_max = J_expr.EvaluatePartial(dict(zip(z, z_max_int)))
-    # V.Substitute({st: 1, ct: 0, thetadot: 0, sp: 1, cp: 0, psidot: 0}) == m2 * g * Len)
-    J_max = J_expr.Substitute({z[0]: 0, z[1]: 0, z[2]: 1, z[3]: 0, z[4]: 1, z[5]: 0, z[6]: 0, z[7]: 0, z[8]: 0, z[9]: 0})
-    # prog.AddLinearConstraint(J_max == mp*g*l)
 
     # Solve and retrieve result.
     options = SolverOptions()
     options.SetOption(CommonSolverOption.kPrintToConsole, 1)
     prog.SetSolverOptions(options)
-    # Only Mosek can solve this example in practice. CSDP is extremely slow, and Clarabel crashes https://github.com/RobotLocomotion/drake/issues/20705.
     mosek_available = MosekSolver().available() and MosekSolver().enabled()
     if not mosek_available:
         print("Mosek is not available. Skipping this example.")
         return Polynomial(Expression(0), z), z
     result = Solve(prog)
     # assert result.is_success()
-    J_star = Polynomial(result.GetSolution(J_expr)).RemoveTermsWithSmallCoefficients(1e-9)
+
+    J_star = Polynomial(result.GetSolution(J_expr)).RemoveTermsWithSmallCoefficients(1e-6)
     os.makedirs("SphericalIP/data/{}".format(z_max), exist_ok=True)
     save_polynomial(J_star, z, "SphericalIP/data/{}/J_lower_bound_deg_{}.pkl".format(z_max, deg))
 
@@ -288,41 +247,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     f2_val = f2(z, T_val)
     dJdz = J_star.ToExpression().Jacobian(z)
     u_star = -0.5 * Rinv.dot(f2_val.T).dot(dJdz.T)
-    print(f"Control Law: {u_star}")
-
-    # Define symbolic variables
-    x, y, theta, phi, x_dot, y_dot, theta_dot, phi_dot = sp.symbols('x y theta phi x_dot y_dot theta_dot phi_dot')
-    s_theta = sp.sin(theta)
-    c_theta = sp.cos(theta)
-    s_phi = sp.sin(phi)
-    c_phi = sp.cos(phi)
-
-    # Parse the string to a SymPy expression
-    fx = sp.sympify(u_star[0])
-    fy = sp.sympify(u_star[1])
-    # Map z matrix parameters to symbolic representations
-    fx_str_sub = fx.__str__().replace("z(0)", "x") \
-        .replace("z(1)", "y") \
-        .replace("z(2)", "sin(theta)") \
-        .replace("z(3)", "cos(theta)") \
-        .replace("z(4)", "sin(phi)") \
-        .replace("z(5)", "cos(phi)") \
-        .replace("z(6)", "x_dot") \
-        .replace("z(7)", "y_dot") \
-        .replace("z(8)", "theta_dot") \
-        .replace("z(9)", "phi_dot")
-    fy_str_sub = fy.__str__().replace("z(0)", "x") \
-        .replace("z(1)", "y") \
-        .replace("z(2)", "sin(theta)") \
-        .replace("z(3)", "cos(theta)") \
-        .replace("z(4)", "sin(phi)") \
-        .replace("z(5)", "cos(phi)") \
-        .replace("z(6)", "x_dot") \
-        .replace("z(7)", "y_dot") \
-        .replace("z(8)", "theta_dot") \
-        .replace("z(9)", "phi_dot")
-    print(f"fx: {fx_str_sub}")
-    print(f"fy: {fy_str_sub}")
+    uToStr(u_star)
 
     if visualize:
         plot_value_function(J_star, z, z_max, u_max, plot_states="thetaphi", actuator_saturate=actuator_saturate)
@@ -338,7 +263,10 @@ def plot_value_function(J_star, z, z_max, u_max, plot_states="xy", actuator_satu
     x_max[4:] = z_max[6:]
     x_min = -x_max
 
-    dJdz = J_star.ToExpression().Jacobian(z)
+    try:
+        dJdz = J_star.ToExpression().Jacobian(z)
+    except:
+        dJdz = J_star.Jacobian(z)
 
     zero_vector = np.zeros(51*51)
     if plot_states == "xtheta":
@@ -409,24 +337,41 @@ def plotCostPolicy(dJdz, J_star, z, X, X1, x_min, x_max, z_max, u_max, xaxis_ind
     plt.tight_layout()
     plt.show()
 
+def uToStr(U, file=None):
+    # Define symbolic variables
+    # Parse the string to a SymPy expression
+    fx = U[0]
+    fy = U[1]
+    # Map z matrix parameters to symbolic representations
+    fx_str_sub = fx.__str__().replace("z(0)", "x") \
+        .replace("z(1)", "y") \
+        .replace("z(2)", "sin(theta)") \
+        .replace("z(3)", "cos(theta)") \
+        .replace("z(4)", "sin(phi)") \
+        .replace("z(5)", "cos(phi)") \
+        .replace("z(6)", "x_dot") \
+        .replace("z(7)", "y_dot") \
+        .replace("z(8)", "theta_dot") \
+        .replace("z(9)", "phi_dot")
+    fy_str_sub = fy.__str__().replace("z(0)", "x") \
+        .replace("z(1)", "y") \
+        .replace("z(2)", "sin(theta)") \
+        .replace("z(3)", "cos(theta)") \
+        .replace("z(4)", "sin(phi)") \
+        .replace("z(5)", "cos(phi)") \
+        .replace("z(6)", "x_dot") \
+        .replace("z(7)", "y_dot") \
+        .replace("z(8)", "theta_dot") \
+        .replace("z(9)", "phi_dot")
+    fx_str_sub= re.sub(r"pow\(([^,]+),\s*(\d+)\)", r"\1^\2", fx_str_sub)
+    fy_str_sub = re.sub(r"pow\(([^,]+),\s*(\d+)\)", r"\1^\2", fy_str_sub)
+    print(f"fx: {fx_str_sub}")
+    print(f"fy: {fy_str_sub}")
 
-def lqr(Q, nz, nu, mp, l):
-    g = 9.81
-
-    A = np.zeros([nz, nz])
-    B = np.zeros([nz, nu])
-    A[0, 3] = 1
-    A[1, -1] = -1
-    A[3, 1] = -mp*g
-    A[4, 1] = -g*(mp)
-    B[3, :] = 1
-    B[4, :] = 1
-    F = np.array([0, 0, -1, 0, 0])
-    R = np.diag([1])
-    K, S = LinearQuadraticRegulator(A, B, Q, R, F=F.reshape(1, nz))
-    return np.squeeze(K), S
+    # Save to text file for Transfer to Matlab
+    if file:
+        with open(file, "w") as text_file:
+            text_file.write(fx_str_sub+"\n"+fy_str_sub)
 
 
-J_star, z = spherical_ip_sos_lower_bound(6, visualize=True, actuator_saturate=False)
-# print(J_star)
-
+J_star, z = spherical_ip_sos_lower_bound(2, visualize=True, actuator_saturate=False, plot_saved=False)
