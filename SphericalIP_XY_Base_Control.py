@@ -48,7 +48,7 @@ if "MOSEKLM_LICENSE_FILE" not in os.environ:
 
 print(MosekSolver().enabled())
 
-def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=False, test=False, actuator_saturate=False, plot_saved=False):
+def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "kSos", visualize=False, test=False, actuator_saturate=False, plot_saved=False):
     nz = 10
     nq = 4
     nx = 2 * nq
@@ -155,7 +155,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     J_expr = J.ToExpression()
 
     if plot_saved:
-        filename = "SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/J_lower_bound_deg_4"
+        filename = "SphericalIP/data/old_0_2pi_int_bounds/J_lower_bound_deg_4_SDSOS_Q20000"
         J_star = load_polynomial(z, filename+".pkl")
         Rinv = np.linalg.inv(R)
         T_val = T(z)
@@ -203,25 +203,25 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     S_sphere = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
     S_Jdot = 0
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(zu), ring_deg)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
+        lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
         S_Jdot += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # negative inside the range of z-space we are defining to be locally stable
 
     # Enforce Input constraint
     u_min = -u_max
     if actuator_saturate:
         for i in range(nu):
-            lam = prog.NewSosPolynomial(Variables(zu), ring_deg)[0].ToExpression()
+            lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()
             S_Jdot += lam * (u[i] - u_max[i]) * (u[i] - u_min[i])
-    prog.AddSosConstraint(LHS + S_sphere + S_Jdot)
+    prog.AddSosConstraint(LHS + S_sphere + S_Jdot, type=prog.NonnegativePolynomial.kSdsos)
 
     # Enforce that value function is Positive Definite
     S_J = 0
     lam_r = prog.NewFreePolynomial(Variables(z), deg).ToExpression()
     S_r = lam_r * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)  # S-procedure again
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(z), deg)[0].ToExpression()
+        lam = prog.NewSosPolynomial(Variables(z), deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()
         S_J += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # +ve when z > zmax or z < zmin, -ve inside z bounds
-    prog.AddSosConstraint(J_expr + S_J + S_r)
+    prog.AddSosConstraint(J_expr + S_J + S_r, type=prog.NonnegativePolynomial.kSdsos)
 
     # J(z0) = 0.
     J0 = J_expr.EvaluatePartial(dict(zip(z, z0)))
@@ -239,8 +239,6 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     # assert result.is_success()
 
     J_star = Polynomial(result.GetSolution(J_expr)).RemoveTermsWithSmallCoefficients(1e-6)
-    os.makedirs("SphericalIP/data/{}".format(z_max), exist_ok=True)
-    save_polynomial(J_star, z, "SphericalIP/data/{}/J_lower_bound_deg_{}.pkl".format(z_max, deg))
 
     # Solve for the optimal feedback in augmented coordinates.
     Rinv = np.linalg.inv(R)
@@ -248,7 +246,11 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", visualize=Fals
     f2_val = f2(z, T_val)
     dJdz = J_star.ToExpression().Jacobian(z)
     u_star = -0.5 * Rinv.dot(f2_val.T).dot(dJdz.T)
-    uToStr(u_star)
+
+    # Save data to file
+    os.makedirs("SphericalIP/data/{}/{}".format(z_max, constraint), exist_ok=True)
+    save_polynomial(J_star, z, "SphericalIP/data/{}/{}/J_lower_bound_deg_{}.pkl".format(z_max, constraint, deg))
+    uToStr(u_star, "SphericalIP/data/{}/{}/J_lower_bound_deg_{}.txt".format(z_max, constraint, deg))
 
     if visualize:
         plot_value_function(J_star, z, z_max, u_max, plot_states="thetaphi", actuator_saturate=actuator_saturate)
@@ -375,4 +377,14 @@ def uToStr(U, file=None):
             text_file.write(fx_str_sub+"\n"+fy_str_sub)
 
 
-J_star, z = spherical_ip_sos_lower_bound(2, visualize=True, actuator_saturate=False, plot_saved=False)
+    def roa():
+        sys = SymbolicVectorSystem(state=[x], dynamics=[-x + x**3])
+        context = sys.CreateDefaultContext()
+        V = RegionOfAttraction(system=sys, context=context)
+
+        print("Verified that " + str(V) + " < 1 is in the region of attraction.")
+
+
+
+
+J_star, z = spherical_ip_sos_lower_bound(4, constraint = "kSdsos", visualize=True, actuator_saturate=False, plot_saved=False)
