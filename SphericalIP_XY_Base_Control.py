@@ -118,6 +118,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
         f2_val[7, :] = [0, -cp / (l * ct)]
         return T @ f2_val
 
+
     # Define State Limits
     u_max = np.array([30, 30])
     z_max = np.array([1.5, 1.5, np.sin(np.pi/2), 1, np.sin(np.pi / 2), 1, 4, 4, 3, 3])
@@ -146,6 +147,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     if test:
         return nz, f, f2, T, x2z, Rinv, z0
 
+
     # Set up optimization.
     prog = MathematicalProgram()
     z = prog.NewIndeterminates(nz, "z")
@@ -166,6 +168,14 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
         plot_value_function(J_star, z, z_max, u_max, plot_states="thetaphi", actuator_saturate=False)
         return 0
 
+
+    # Configure Optimization Strategy
+    if constraint == "kSos":
+        constraint_type = prog.NonnegativePolynomial.kSos
+    elif constraint == "kSdsos":
+        constraint_type = prog.NonnegativePolynomial.kSdsos
+    else:
+        constraint_type = prog.NonnegativePolynomial.kDsos
 
     xythetaphi_idx = [0, 1, 6, 7, 8, 9]
 
@@ -197,31 +207,31 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     LHS = J_dot + l_cost(z, u) * denominator  # Lower bound on cost to go V >= -l  -->  V + l >= 0
     # LHS = J_dot + 10*denominator# Relaxed Hamilton jacobian bellman conditions, non-optimal, but still lyapunov
 
-    ring_deg = 4
+    ring_deg = 6
     # S procedure for st^2 + ct^2 + sp^2 + cp^2 = 2.
     lam = prog.NewFreePolynomial(Variables(zu), ring_deg).ToExpression()
     S_sphere = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
     S_Jdot = 0
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
+        lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=constraint_type)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
         S_Jdot += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # negative inside the range of z-space we are defining to be locally stable
 
     # Enforce Input constraint
     u_min = -u_max
     if actuator_saturate:
         for i in range(nu):
-            lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()
+            lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=constraint_type)[0].ToExpression()
             S_Jdot += lam * (u[i] - u_max[i]) * (u[i] - u_min[i])
-    prog.AddSosConstraint(LHS + S_sphere + S_Jdot, type=prog.NonnegativePolynomial.kSdsos)
+    prog.AddSosConstraint(LHS + S_sphere + S_Jdot, type=constraint_type)
 
     # Enforce that value function is Positive Definite
     S_J = 0
     lam_r = prog.NewFreePolynomial(Variables(z), deg).ToExpression()
     S_r = lam_r * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)  # S-procedure again
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(z), deg, type=prog.NonnegativePolynomial.kSdsos)[0].ToExpression()
+        lam = prog.NewSosPolynomial(Variables(z), deg, type=constraint_type)[0].ToExpression()
         S_J += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # +ve when z > zmax or z < zmin, -ve inside z bounds
-    prog.AddSosConstraint(J_expr + S_J + S_r, type=prog.NonnegativePolynomial.kSdsos)
+    prog.AddSosConstraint(J_expr + S_J + S_r, type=constraint_type)
 
     # J(z0) = 0.
     J0 = J_expr.EvaluatePartial(dict(zip(z, z0)))
@@ -387,4 +397,4 @@ def uToStr(U, file=None):
 
 
 
-J_star, z = spherical_ip_sos_lower_bound(4, constraint = "kSdsos", visualize=True, actuator_saturate=False, plot_saved=False)
+J_star, z = spherical_ip_sos_lower_bound(2, constraint = "kSdsos", visualize=True, actuator_saturate=True, plot_saved=False)
