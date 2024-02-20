@@ -207,7 +207,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     LHS = J_dot + l_cost(z, u) * denominator  # Lower bound on cost to go V >= -l  -->  V + l >= 0
     # LHS = J_dot + 10*denominator# Relaxed Hamilton jacobian bellman conditions, non-optimal, but still lyapunov
 
-    ring_deg = 6
+    ring_deg = 4
     # S procedure for st^2 + ct^2 + sp^2 + cp^2 = 2.
     lam = prog.NewFreePolynomial(Variables(zu), ring_deg).ToExpression()
     S_sphere = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
@@ -397,4 +397,4 @@ def uToStr(U, file=None):
 
 
 
-J_star, z = spherical_ip_sos_lower_bound(2, constraint = "kSdsos", visualize=True, actuator_saturate=True, plot_saved=False)
+J_star, z = spherical_ip_sos_lower_bound(4, constraint = "kSdsos", visualize=True, actuator_saturate=True, plot_saved=False)

@@ -47,6 +47,31 @@ x_old = x
 print(result.is_success())
 print(f'rho = {rho_sol}.')
 
+prog1 = MathematicalProgram()
+x = prog1.NewIndeterminates(2, "x")
+
+V = x.dot(P).dot(x)
+V_dot = 2 * x.dot(P).dot(f(x))
+
+l_deg = 0
+l_poly = prog1.NewFreePolynomial(Variables(x), l_deg)
+l = l_poly.ToExpression()
+
+rho1 = prog1.NewContinuousVariables(1)
+
+x_normsq = x.dot(x)
+prog1.AddSosConstraint(x_normsq * (V - rho1[0]) - l * V_dot)
+
+prog1.AddLinearCost(-rho1[0])
+
+result = Solve(prog1)
+rho_sol_mod = result.GetSolution(rho1)[0]
+
+x_old_mod = x
+
+print(result.is_success())
+print(f'rho = {rho_sol_mod}.')
+
 prog = MathematicalProgram()
 
 x = prog.NewIndeterminates(2, "x")
@@ -62,7 +87,9 @@ rho = prog.NewContinuousVariables(1)
 VDOT_FEAS_EPS = 3e-1
 
 x_normsq = x.dot(x)
-prog.AddSosConstraint(x_normsq * (V - rho[0]) - l * (V_dot + VDOT_FEAS_EPS * V))
+# prog.AddSosConstraint(x_normsq * (V - rho[0]) - l * (V_dot + VDOT_FEAS_EPS * x_normsq))
+prog.AddSosConstraint(x_normsq * (V - rho[0]) - l * (V_dot + VDOT_FEAS_EPS * x_normsq))
+
 
 prog.AddLinearCost(-rho[0])
 
@@ -81,7 +108,7 @@ l_sol_harder_pruned = Polynomial(l_sol_harder).RemoveTermsWithSmallCoefficients(
 print("l_sol_harder_pruned: ", l_sol_harder_pruned)
 
 
-def plot_V(rho, label, color):
+def plot_V(rho, label, color, linestyle):
     # grid of the state space
     x1 = np.linspace(*xlim)
     x2 = np.linspace(*xlim)
@@ -92,7 +119,7 @@ def plot_V(rho, label, color):
     eval_V = lambda x: sum(sum(x[i] * x[j] * Pij for j, Pij in enumerate(Pi)) for i, Pi in enumerate(P))
 
     # contour plot with only the rho level set
-    cs = plt.contour(X1, X2, eval_V([X1, X2]), levels=[rho], colors=color, linewidths=3, zorder=3)
+    cs = plt.contour(X1, X2, eval_V([X1, X2]), levels=[rho], colors=color, linestyle=linestyle, linewidths=3, zorder=3)
 
     # misc plot settings
     plt.xlabel(r'$x_1$')
@@ -134,14 +161,16 @@ xlim = (-3, 3)
 limit_cycle = VanDerPolOscillator.CalcLimitCycle()
 
 plot_2d_phase_portrait(f, x1lim=xlim, x2lim=xlim)
-plot_V(rho_sol, "original", "r")
-plot_V(rho_sol_harder, "harder", "g")
+plot_V(rho_sol, "original", "r", linestyle='solid')
+plot_V(rho_sol_harder, "harder", "g", linestyle='solid')
+plot_V(rho_sol_mod, "SOS relaxed", "m", linestyle='dashed')
 plt.plot(limit_cycle[0], limit_cycle[1], color='b', linewidth=3, label='ROA boundary')
 plt.legend(loc=1)
 plt.show()
 
 fig, ax = plt.subplots()
 plot_Vdot()
-plot_V(rho_sol, "original", "r")
-plot_V(rho_sol_harder, "harder", "g")
+plot_V(rho_sol, "original", "r", linestyle='solid')
+plot_V(rho_sol_harder, "harder", "g", linestyle='solid')
+plot_V(rho_sol_mod, "SOS relaxed", "m", linestyle='dashed')
 plt.show()
