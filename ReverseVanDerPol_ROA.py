@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from matplotlib import rcParams
 
 # pydrake imports
-from pydrake.all import (LinearQuadraticRegulator, MathematicalProgram,
+from pydrake.all import (LinearQuadraticRegulator, Jacobian, MathematicalProgram,
                          RealContinuousLyapunovEquation, MonomialBasis, Solve, Polynomial, Variables, Monomial)
 from pydrake.examples import VanDerPolOscillator
 # underactuated imports

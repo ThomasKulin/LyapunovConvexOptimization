@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from matplotlib import cm
+from utils import load_polynomial
 from pydrake.all import (
     AddMultibodyPlantSceneGraph,
     BasicVector,
@@ -324,8 +325,8 @@ def cartpole_sos_lower_bound(deg):
     return J_star, z
 
 # Note: Lu recommends degree 6, but it takes a few minutes to compute.
-J_star, z = cartpole_sos_lower_bound(deg=2)
-plot_value_function(J_star, z)
+# J_star, z = cartpole_sos_lower_bound(deg=2)
+# plot_value_function(J_star, z)
 
 
 class Controller(LeafSystem):
@@ -397,4 +398,10 @@ def simulate(J_star, z, x0):
     viz.PublishRecording()
 
 
-simulate(J_star, z, [0.01, 0, 0, 0])
+prog = MathematicalProgram()
+z = prog.NewIndeterminates(nz, "z")
+filename = "/home/thomas/Documents/thesis/LyapunovConvexOptimization/SphericalIP/data/test/J_upper_bound_lower_deg_1_deg_2.pkl"
+J_star = load_polynomial(z, filename)
+
+simulate(J_star, z, [0.01, np.pi-0.2, 0, 0])
+print("wait")

@@ -48,7 +48,7 @@ if "MOSEKLM_LICENSE_FILE" not in os.environ:
 
 print(MosekSolver().enabled())
 
-def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "kSos", visualize=False, test=False, actuator_saturate=False, plot_saved=False):
+def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "kSos", visualize=False, test=False, actuator_saturate=False, read_file=None):
     nz = 10
     nq = 4
     nx = 2 * nq
@@ -134,7 +134,9 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     # Quadratic running cost in augmented state.
     # z = (x, y, st, ct, sp, cp, xdot, ydot, thetadot, phidot)
     # state weighting matrix
-    Q_diag = [0.01, 0.01, 20000, 20000, 20000, 20000, 1, 1, 1, 1]
+    # Q_diag = [0.01, 0.01, 20000, 20000, 20000, 20000, 1, 1, 1, 1]  # Q20000
+    Q_diag = [0.01, 0.01, 2e4, 2e4, 2e4, 2e4, .01, .01, 2e2, 2e2]  #TP2e4_TPDOT2e2
+
     Q = np.diag(Q_diag)
     # u = (fx fy)
     # control weighting matrix
@@ -156,8 +158,8 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     J = prog.NewFreePolynomial(Variables(z), deg)
     J_expr = J.ToExpression()
 
-    if plot_saved:
-        filename = "SphericalIP/data/old_0_2pi_int_bounds/J_lower_bound_deg_4_SDSOS_Q20000"
+    if read_file:
+        filename = read_file
         J_star = load_polynomial(z, filename+".pkl")
         Rinv = np.linalg.inv(R)
         T_val = T(z)
@@ -165,6 +167,9 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
         dJdz = J_star.Jacobian(z)
         u_star = -0.5 * Rinv.dot(f2_val.T).dot(dJdz.T)
         uToStr(u_star, filename+".txt")
+        f_val, denom = f(z, u, T_val)
+        # degF = max([Polynomial(i).TotalDegree() for i in f_val])
+        # deg_Ustar = max([[Polynomial(i, z).TotalDegree() for i in j] for j in u_star])
         plot_value_function(J_star, z, z_max, u_max, plot_states="thetaphi", actuator_saturate=False)
         return 0
 
@@ -200,7 +205,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     # Make the numerics better
     prog.AddLinearCost(-cost / np.max(np.abs(cost_coeff)))
 
-    # Enforce Lyapunov function is negative definite (bellman inequality for optimal)
+    # Enforce Lyapunov function is negative definite (HJB inequality)
     T_val = T(z)
     f_val, denominator = f(z, u, T_val)
     J_dot = J_expr.Jacobian(z).dot(f_val)
@@ -209,11 +214,12 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
 
     ring_deg = 4
     # S procedure for st^2 + ct^2 + sp^2 + cp^2 = 2.
-    lam = prog.NewFreePolynomial(Variables(zu), ring_deg).ToExpression()
+    lam = prog.NewFreePolynomial(Variables(zu), ring_deg).ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
     S_sphere = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
+    # S procedure for z_min < z < z_max
     S_Jdot = 0
     for i in np.arange(nz):
-        lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=constraint_type)[0].ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
+        lam = prog.NewSosPolynomial(Variables(zu), ring_deg, type=constraint_type)[0].ToExpression()
         S_Jdot += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # negative inside the range of z-space we are defining to be locally stable
 
     # Enforce Input constraint
@@ -228,6 +234,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     S_J = 0
     lam_r = prog.NewFreePolynomial(Variables(z), deg).ToExpression()
     S_r = lam_r * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)  # S-procedure again
+    # S procedure for z_min < z < z_max
     for i in np.arange(nz):
         lam = prog.NewSosPolynomial(Variables(z), deg, type=constraint_type)[0].ToExpression()
         S_J += lam * (z[i] - z_max[i]) * (z[i] - z_min[i])  # +ve when z > zmax or z < zmin, -ve inside z bounds
@@ -271,8 +278,8 @@ def plot_value_function(J_star, z, z_max, u_max, plot_states="xy", actuator_satu
     nz = 10
     x_max = np.zeros(8)
     x_max[:2] = z_max[:2]
-    x_max[2] = np.pi/2
-    x_max[3] = np.pi / 2
+    x_max[2] = np.pi/2-.1
+    x_max[3] = np.pi/2-.1
     x_max[4:] = z_max[6:]
     x_min = -x_max
 
@@ -302,7 +309,16 @@ def plot_value_function(J_star, z, z_max, u_max, plot_states="xy", actuator_satu
                         np.linspace(x_min[1], x_max[1], 51))
         X = np.vstack((X1.flatten(), Y.flatten(), zero_vector, zero_vector, zero_vector, zero_vector, zero_vector, zero_vector))
         plotCostPolicy(dJdz, J_star, z, X, X1, x_min, x_max, z_max, u_max, 0, 1, "x", "y", actuator_saturate=actuator_saturate)
-
+    elif plot_states == "thetadot":
+        THETA1, THETADOT = np.meshgrid(np.linspace(x_min[2], x_max[2], 51),
+                        np.linspace(x_min[6], x_max[6], 51))
+        THETA = np.vstack((zero_vector, zero_vector, THETA1.flatten(), zero_vector, zero_vector, zero_vector, THETADOT.flatten(), zero_vector))
+        plotCostPolicy(dJdz, J_star, z, THETA, THETA1, x_min, x_max, z_max, u_max, 2, 3, "theta", "theta_dot", actuator_saturate=actuator_saturate)
+    elif plot_states == "phidot":
+        PHI1, PHIDOT = np.meshgrid(np.linspace(x_min[3], x_max[3], 51),
+                        np.linspace(x_min[7], x_max[7], 51))
+        PHI = np.vstack((zero_vector, zero_vector, zero_vector, PHI1.flatten(), zero_vector, zero_vector, zero_vector, PHIDOT.flatten()))
+        plotCostPolicy(dJdz, J_star, z, PHI, PHI1, x_min, x_max, z_max, u_max, 2, 3, "phi", "phi_dot", actuator_saturate=actuator_saturate)
 
 
 
@@ -327,7 +343,7 @@ def plotCostPolicy(dJdz, J_star, z, X, X1, x_min, x_max, z_max, u_max, xaxis_ind
             if actuator_saturate:
                 U[_] = np.clip(U[_], -u_max[i], u_max[i])
             else:
-                U[_] = np.clip(U[_], -60, 60)
+                U[_] = np.clip(U[_], -1000, 1000)
 
         axs[i,0].set_xlabel(xlabel)
         axs[i,0].set_ylabel(ylabel)
@@ -396,5 +412,6 @@ def uToStr(U, file=None):
 
 
 
-
-J_star, z = spherical_ip_sos_lower_bound(4, constraint = "kSdsos", visualize=True, actuator_saturate=True, plot_saved=False)
+# filename = "/home/thomas/Documents/thesis/LyapunovConvexOptimization/SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/J_lower_bound_deg_4_SOS_Q20000"
+filename = "/home/thomas/Documents/thesis/LyapunovConvexOptimization/SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/kSdsos/J_lower_bound_deg_4_TP2e4_TPDOT2e2"
+J_star, z = spherical_ip_sos_lower_bound(4, constraint = "kSdsos", visualize=True, actuator_saturate=False, read_file=filename)

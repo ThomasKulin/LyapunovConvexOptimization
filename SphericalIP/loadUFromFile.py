@@ -53,5 +53,5 @@ prog = MathematicalProgram()
 z = prog.NewIndeterminates(5, "z")
 
 # J_star = load_polynomial(z, "SphericalIP/data/{}/{}/J_lower_bound_deg_6.pkl".format(z_max, deg))
-J_star = load_polynomial(z, "data/[10. 10.  1.  1.  1.  1.  6.  6.  6.  6.]/J_lower_bound_deg_4.pkl")
+J_star = load_polynomial(z, "data/[10. 10.  1.  1.  1.  1.  6.  6.  6.  6.]/J_lower_bound_deg_4_TP2e4_TPDOT2e2.pkl")
 
