@@ -3,7 +3,7 @@ import numpy as np
 from veril.systems import get_system
 # from veril.sample_lyap import get_V
 from veril.symbolic_verifier import verify_via_equality, verify_via_bilinear, levelset_sos, global_vdot, cvx_V
-from veril.sample_variety import verify_via_variety, bilinear_variety_opt
+from veril.sample_variety import verify_via_variety
 from veril.util.plots import *
 
 if "MOSEKLM_LICENSE_FILE" not in os.environ:
@@ -21,11 +21,11 @@ sys_name = 'SphericalIP'
 deg_ftrs = 5
 rm_one = True
 system = get_system(sys_name, deg_ftrs, 0, rm_one)
-
+A, P, V = system.linearized_quadractic_V()
 # Estimate stability boundaries
 xaxis = [-np.pi/2, np.pi/2]
 yaxis = [-np.pi, np.pi]
-slice_idx = (3,7)
+slice_idx = (2,3)
 stableSamples = system.sample_stable_inits(xaxis=xaxis, yaxis=yaxis, num_grid=100, slice_idx=slice_idx)
 plot_samples(system, xaxis=xaxis, yaxis=yaxis, slice_idx=slice_idx)
 

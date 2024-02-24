@@ -169,8 +169,8 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
         uToStr(u_star, filename+".txt")
         f_val, denom = f(z, u, T_val)
         # degF = max([Polynomial(i).TotalDegree() for i in f_val])
-        # deg_Ustar = max([[Polynomial(i, z).TotalDegree() for i in j] for j in u_star])
-        plot_value_function(J_star, z, z_max, u_max, plot_states="thetaphi", actuator_saturate=False)
+        # deg_Ustar = max([[Polynomial(i, z).TotalDegree() for i in j] for j in u_star]
+        plot_value_function(J_star, z, z_max, u_star, plot_states="thetaphi", actuator_saturate=False)
         return 0
 
 
@@ -325,7 +325,11 @@ def plot_value_function(J_star, z, z_max, u_max, plot_states="xy", actuator_satu
 def plotCostPolicy(dJdz, J_star, z, X, X1, x_min, x_max, z_max, u_max, xaxis_ind, yaxis_ind, xlabel, ylabel, actuator_saturate=False):
     nz, f, f2, T, x2z, Rinv, z0 = spherical_ip_sos_lower_bound(2, test=True)
     Z = x2z(X)
-
+    prog = MathematicalProgram()
+    # x = prog.NewIndeterminates(8, "x")
+    # from pydrake.math import sin, cos
+    # u_lyap = [(969930 * z[0] + 74610 * z[6] + 9699300 * z[2] - 1170000 * z[0] * z[3] ** 2 - 90000 * z[6] * z[3] ** 2 - 746100 * z[8] ** 2 * z[2] - 153900 * z[8] * z[3] + 1170000 * z[0] * z[5] ** 2 * z[3] ** 2 + 90000 * z[6] * z[5] ** 2 * z[3] ** 2 - 746100 * z[9] ** 2 * z[3] ** 2 * z[2] + 900000 * z[8] * z[5] ** 2 * z[3] + 8132490 * z[5] * z[3] * z[2] + 1170000 * z[1] * z[3] * z[4] * z[2] + 90000 * z[7] * z[3] * z[4] * z[2] + 900000 * z[9] * z[5] * z[3] ** 2 * z[4] * z[2]) / (829000 * z[5] ** 2 * z[3] ** 2 - 141759),
+    #           (1170000 * z[1] * z[3] ** 2 - 15390 * z[7] - 200070 * z[1] + 90000 * z[7] * z[3] ** 2 + 9699300 * z[3] * z[4] - 746100 * z[9] ** 2 * z[3] ** 3 * z[4] + 8132490 * z[5] * z[3] ** 2 * z[4] - 153900 * z[9] * z[5] * z[3] + 153900 * z[8] * z[4] * z[2] + 900000 * z[9] * z[5] * z[3] ** 3 - 746100 * z[8] ** 2 * z[3] * z[4] + 1170000 * z[0] * z[3] * z[4] * z[2] + 90000 * z[6] * z[3] * z[4] * z[2]) / (829000 * z[5] ** 2 * z[3] ** 2 - 141759)]
     fig, axs = plt.subplots(2, 2, figsize=(8, 8))  # figsize can be adjusted as needed
     for i in range(2):
 
@@ -340,6 +344,7 @@ def plotCostPolicy(dJdz, J_star, z, X, X1, x_min, x_max, z_max, u_max, xaxis_ind
             for n in range(nz):
                 dJdz_val[n] = dJdz[n].Evaluate(dict(zip(z, z_val)))
             U[_] = calc_u_opt(dJdz_val, f2_val, Rinv)[i]
+            # U[_] = u_lyap[i].Evaluate(dict(zip(z, z_val)))
             if actuator_saturate:
                 U[_] = np.clip(U[_], -u_max[i], u_max[i])
             else:
@@ -413,5 +418,5 @@ def uToStr(U, file=None):
 
 
 # filename = "/home/thomas/Documents/thesis/LyapunovConvexOptimization/SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/J_lower_bound_deg_4_SOS_Q20000"
-filename = "/home/thomas/Documents/thesis/LyapunovConvexOptimization/SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/kSdsos/J_lower_bound_deg_4_TP2e4_TPDOT2e2"
+filename = "/home/thomas/Documents/LyapunovConvexOptimization/SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/kSdsos/J_lower_bound_deg_4_TP2e4_TPDOT2e2"
 J_star, z = spherical_ip_sos_lower_bound(4, constraint = "kSdsos", visualize=True, actuator_saturate=False, read_file=filename)

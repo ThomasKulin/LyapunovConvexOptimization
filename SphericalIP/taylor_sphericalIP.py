@@ -195,34 +195,6 @@ u_star = -0.5 * Rinv.dot(f2_val.T).dot(dJdz.T)
 x = prog.NewIndeterminates(nx, "x")
 
 
-# f_val= f(z, u_star, T_val)
-# for i in range(len(f_val)):
-#     f_val[i] = f_val[i].Substitute(z[0], x[0])
-#     f_val[i] = f_val[i].Substitute(z[1], x[1])
-#     f_val[i] = f_val[i].Substitute(z[2], sin(x[2]))
-#     f_val[i] = f_val[i].Substitute(z[3], cos(x[2]))
-#     f_val[i] = f_val[i].Substitute(z[4], sin(x[3]))
-#     f_val[i] = f_val[i].Substitute(z[5], cos(x[3]))
-#     f_val[i] = f_val[i].Substitute(z[6], x[4])
-#     f_val[i] = f_val[i].Substitute(z[7], x[5])
-#     f_val[i] = f_val[i].Substitute(z[8], x[6])
-#     f_val[i] = f_val[i].Substitute(z[9], x[7])
-# zToX(f_val, z, z)
-
-# for i in range(len(u_star)):
-#     u_star[i] = u_star[i].Substitute(z[0], x[0])
-#     u_star[i] = u_star[i].Substitute(z[1], x[1])
-#     u_star[i] = u_star[i].Substitute(z[2], sin(x[2]))
-#     u_star[i] = u_star[i].Substitute(z[3], cos(x[2]))
-#     u_star[i] = u_star[i].Substitute(z[4], sin(x[3]))
-#     u_star[i] = u_star[i].Substitute(z[5], cos(x[3]))
-#     u_star[i] = u_star[i].Substitute(z[6], x[4])
-#     u_star[i] = u_star[i].Substitute(z[7], x[5])
-#     u_star[i] = u_star[i].Substitute(z[8], x[6])
-#     u_star[i] = u_star[i].Substitute(z[9], x[7])
-
-
-
 # save taylor approximation in python format
 u_star = zToX(u_star, z, x)
 f_val= fx(x, u_star)
@@ -231,16 +203,25 @@ order = 3
 # filename = filename+f"_TaylorSeries_Order{order}.txt"
 # saveSystem_py(f_taylor, filepath+filename, nx)
 
-# Save the full system dymanics in a Matlab Readable Format
+# # Save the full system dymanics in a Matlab Readable Format
 # filename = filename+f"_closedloop.txt"
 # saveSystem_mat(f_val, filepath+filename, nx)
 
-# save J_star in python format
-J_star_x = zToX([J_star], z, x)
-J_taylor = [TaylorExpand(f, {x[i]: x0[i] for i in range(len(x))}, order) for f in J_star_x]
-filename = filename+f"_Jstar.txt"
-saveSystem_py(J_taylor, filepath+filename, nx)
+# # save J_star in python format
+# J_star_x = zToX([J_star], z, x)
+# J_taylor = [TaylorExpand(f, {x[i]: x0[i] for i in range(len(x))}, order) for f in J_star_x]
+# filename = filename+f"_Jstar.txt"
+# saveSystem_py(J_taylor, filepath+filename, nx)
 
+# calculate Taylor expansion of analytical Lyapunov control kp_10_k1k2_13
+u_lyap = [(969930*x[0] + 74610*x[4] + 9699300*sin(x[2]) - 1170000*x[0]*cos(x[2])**2 - 90000*x[4]*cos(x[2])**2 - 746100*x[6]**2*sin(x[2]) - 153900*x[6]*cos(x[2]) + 1170000*x[0]*cos(x[3])**2*cos(x[2])**2 + 90000*x[4]*cos(x[3])**2*cos(x[2])**2 - 746100*x[7]**2*cos(x[2])**2*sin(x[2]) + 900000*x[6]*cos(x[3])**2*cos(x[2]) + 8132490*cos(x[3])*cos(x[2])*sin(x[2]) + 1170000*x[1]*cos(x[2])*sin(x[3])*sin(x[2]) + 90000*x[5]*cos(x[2])*sin(x[3])*sin(x[2]) + 900000*x[7]*cos(x[3])*cos(x[2])**2*sin(x[3])*sin(x[2]))/(829000*cos(x[3])**2*cos(x[2])**2 - 141759),
+          (1170000*x[1]*cos(x[2])**2 - 15390*x[5] - 200070*x[1] + 90000*x[5]*cos(x[2])**2 + 9699300*cos(x[2])*sin(x[3]) - 746100*x[7]**2*cos(x[2])**3*sin(x[3]) + 8132490*cos(x[3])*cos(x[2])**2*sin(x[3]) - 153900*x[7]*cos(x[3])*cos(x[2]) + 153900*x[6]*sin(x[3])*sin(x[2]) + 900000*x[7]*cos(x[3])*cos(x[2])**3 - 746100*x[6]**2*cos(x[2])*sin(x[3]) + 1170000*x[0]*cos(x[2])*sin(x[3])*sin(x[2]) + 90000*x[4]*cos(x[2])*sin(x[3])*sin(x[2]))/(829000*cos(x[3])**2*cos(x[2])**2 - 141759)]
+f_lyap= fx(x, u_lyap)
+f_taylor = [TaylorExpand(f, {x[i]: x0[i] for i in range(len(x))}, order) for f in f_lyap]
+filepath = "./data/AnalyticalModel/"
+filename = "closedLoopDynamics_kp_10_k1k2_13"
+filename = filename+f"_TaylorSeries_Order{order}.txt"
+saveSystem_py(f_taylor, filepath+filename, nx)
 
 
 print("done")
