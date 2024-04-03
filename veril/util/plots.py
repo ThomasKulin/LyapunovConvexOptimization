@@ -28,10 +28,7 @@ def plot_funnel(V, system, **kwargs):
     [sys_name, slice_idx, file_dir, add_title, id1, id2, stable_samples] = \
         plot_params(system, **kwargs)
 
-    if sys_name is 'VanderPol':
-        xlim = np.load(file_dir + '/VanDerPol_limitCycle.npy')
-        plt.plot(xlim[0], xlim[1], color='red', label='Known ROA Boundary')
-    elif stable_samples is not None:
+    if stable_samples is not None:
         plt.scatter(stable_samples[:, 0], stable_samples[:, 1], color='red',
                     label='Simulated Stable Samples')
 
@@ -43,6 +40,47 @@ def plot_funnel(V, system, **kwargs):
     leg = plt.legend()
     plt.title(sys_name + add_title)
     plt.savefig(file_dir + '/funnel' + add_title + '.png', dpi=None,
+                facecolor='w', edgecolor='w', orientation='portrait',
+                format=None, transparent=False,
+                bbox_inches=None, pad_inches=0.1)
+    plt.show()
+
+def plot_barrier(B, system, **kwargs):
+    [sys_name, slice_idx, file_dir, add_title, id1, id2, stable_samples] = \
+        plot_params(system, **kwargs)
+
+
+    if stable_samples is not None:
+        plt.scatter(stable_samples[:, 0], stable_samples[:, 1], color='red',
+                    label='Simulated Stable Samples', s=10)
+    nPts = 151  # number of pts in each axis
+    zero_vector = np.zeros(nPts**2)
+    X1, X2 = np.meshgrid(np.linspace(-2, 2, nPts),
+                               np.linspace(-2, 2, nPts))
+    # X = np.vstack((X1.flatten(), X2.flatten(), zero_vector, zero_vector))
+    # X = np.vstack((X1.flatten(), zero_vector, X2.flatten(), zero_vector))
+
+    X = np.vstack((zero_vector, zero_vector, X1.flatten(), X2.flatten(), zero_vector, zero_vector, zero_vector, zero_vector))
+    # X = np.vstack((zero_vector, zero_vector, X1.flatten(), zero_vector, zero_vector, zero_vector, X2.flatten(),  zero_vector))
+    # X = np.vstack((zero_vector, zero_vector, zero_vector, X1.flatten(), zero_vector, zero_vector, zero_vector, X2.flatten()))
+
+
+    B_val = np.zeros(X.shape[1])
+    for _ in range(X.shape[1]):
+        x_val = X[:, _]
+        B_val[_] = B.Evaluate(dict(zip(system.sym_x, x_val)))
+    B_val = B_val.reshape(X1.shape)
+    plt.contour(X1, X2, B_val, levels=[0], colors='blue', label='Verified Outer ROA Barrier')
+    # Fill the area where B > 0
+    # levels = np.linspace(0, B_val.max(), 100)
+    # plt.contourf(X1, X2, B_val, levels=levels, cmap='Blues', alpha=0.5)
+    plt.contourf(X1, X2, B_val, levels=[0, B_val.max()], colors=['blue'], alpha=0.25, label='Verified Outer ROA Barrier')
+
+    plt.xlabel('X' + id1)
+    plt.ylabel('X' + id2)
+    leg = plt.legend()
+    plt.title(sys_name + add_title)
+    plt.savefig(file_dir + '/barrier' + add_title + '.png', dpi=None,
                 facecolor='w', edgecolor='w', orientation='portrait',
                 format=None, transparent=False,
                 bbox_inches=None, pad_inches=0.1)

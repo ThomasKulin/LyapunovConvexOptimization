@@ -689,7 +689,7 @@ def PendulumPlant_(T):
 			if V is None:
 				# Do optimization to find the Lyapunov candidate.
 				#print('******\nRunning SOS to find Lyapunov function ...') 
-				#V, Vdot = self.findLyapunovFunctionSOS(xtraj, utraj, deg_V, deg_L)
+				# V, Vdot = self.findLyapunovFunctionSOS(xtraj, utraj, deg_V, deg_L)
 				# or Do tvlqr to get S
 				print('******\nRunning TVLQR ...')
 				K, S  = self.TVLQR(xtraj, utraj, Q, R, Qf) 

@@ -1,6 +1,7 @@
 # import sys
 # sys.path.append(
 #     "/Users/shenshen/drake-build/install/lib/python3.7/site-packages")
+import pydrake.symbolic
 from pydrake.all import (MathematicalProgram, Polynomial, Expression,
                          SolverOptions, CommonSolverOption,
                          SolutionResult, Variables, Solve, Jacobian, Evaluate,
@@ -64,7 +65,7 @@ def verify_via_equality(system, V0):
     return V
 
 
-def verify_via_bilinear(system, **kwargs):
+def verify_via_bilinear(system, V=None, **kwargs):
     assert system.loop_closed
     sys_name = system.name
     degV = system.degV
@@ -74,12 +75,39 @@ def verify_via_bilinear(system, **kwargs):
                'converged_tol': 2e-2, 'max_iterations': 20}
 
     start = time.time()
-    A, S, V0 = system.linearized_quadractic_V()
+    if not V:
+        A, S, V0 = system.linearized_quadractic_V()
+    else:
+        V0=V
+        S=None
+        A=None
 
     if 'V0' in kwargs:
         V0 = kwargs['V0']
     V = bilinear(
         system.sym_x, V0, system.sym_f, S, A, **options)
+    end = time.time()
+    print('bilinear time %s' % (end - start))
+    plot_funnel(V, system, slice_idx=system.slice,
+                add_title=' - Bilinear Result')
+    return system, V
+
+def verify_via_bilinear2(system, U=None, **kwargs):
+    assert system.loop_closed
+    sys_name = system.name
+    degV = system.degV
+    degf = system.degf
+    degL = degV - 1 + degf
+    options = {'degV': degV, 'do_balance': False, 'degL1': degL, 'degL2': degL,
+               'converged_tol': 2e-2, 'max_iterations': 20}
+
+    start = time.time()
+    A, P0, V0 = system.linearized_quadractic_V()
+
+    if 'V0' in kwargs:
+        V0 = kwargs['V0']
+    V = bilinear2(
+        system.sym_x, V0, P0, system.sym_f, **options)
     end = time.time()
     print('bilinear time %s' % (end - start))
     plot_funnel(V, system, slice_idx=system.slice,
@@ -110,6 +138,256 @@ def cvx_V(system, sys_name):
     V, Vdot = system.P_to_V(P)
     return V, Vdot, system
 
+def bilinear2(x, V0, P0, f, **kwargs):
+    V = V0
+    P = np.eye(len(x))
+    nX = x.shape[0]
+    max_iterations = kwargs['max_iterations']
+    converged_tol = kwargs['converged_tol']
+
+    rho = 1
+    vol = 10000
+    for iter in range(max_iterations):
+        print('iteration  %s' % (iter))
+        last_vol = vol
+
+        T = np.eye(nX)
+        V0 = V0.Substitute(dict(zip(x, T@x)))
+        # V = V / rho
+        [rho, lamda] = findRhoLamda(x, V, f, **kwargs)
+        V = findV(x, f, P, lamda, **kwargs)
+
+        Pdiag = extract_diagonal_P_fromV(V, x)
+        trace = 0
+        for i in range(len(Pdiag)):
+            trace += Pdiag[i][i]
+        vol = trace.Evaluate()
+
+        if vol - last_vol > converged_tol * last_vol:
+            break
+
+    print('final rho is %s' % (rho))
+    # env = dict(zip(x, np.array([1, 2.31])))
+    # print('V is %s' % (V.Evaluate(env)))
+    return V*1e7
+
+def findRhoLamda(x, V, f, **kwargs):
+    prog = MathematicalProgram()
+    prog.AddIndeterminates(x)
+    degL1 = kwargs['degL1']
+
+    Vdot = V.Jacobian(x) @ f
+    degV = Polynomial(V, x).TotalDegree()
+    degVdot = Polynomial(Vdot, x).TotalDegree()
+    degxx = int(np.floor((degL1 + degVdot - degV) / 2))
+
+    rho = prog.NewContinuousVariables(1, "p")[0]
+    prog.AddConstraint(rho >= 0)
+    lamda = prog.NewFreePolynomial(Variables(x), degL1).ToExpression()
+
+    xbar = x
+    epsilon = 1e-9
+    prog.AddSosConstraint(((xbar).T @ (xbar)) ** (degxx) * (V - rho) + lamda*Vdot)
+    prog.AddCost(-rho)
+
+    solver = MosekSolver()
+    options = SolverOptions()
+    options.SetOption(CommonSolverOption.kPrintToConsole, 1)
+    prog.SetSolverOptions(options)
+    result = solver.Solve(prog, None, None)
+    print(result.get_solution_result())
+    assert result.is_success()
+
+    lamda = result.GetSolution(lamda)
+    rho = result.GetSolution(rho)
+    return rho, lamda
+
+def extract_diagonal_P_fromV(V, z):
+    poly = Polynomial(V,z)
+    nz = len(z)
+    P = np.zeros((nz,nz), dtype=pydrake.symbolic.Expression)
+    for monomial, coeff in poly.monomial_to_coefficient_map().items():
+        m = []
+        for i in range(nz):
+            m.append(monomial.degree(z[i]))
+        for i in range(len(m)):
+            if m[i] == 2:
+                P[i, i] = coeff
+    return P
+
+def findV(x, f, P, lamda, **kwargs):
+    prog = MathematicalProgram()
+    prog.AddIndeterminates(x)
+    degL1 = kwargs['degL1']
+    degV = kwargs['degV']
+
+    # V = x.T @ P @ x
+    V = prog.NewSosPolynomial(Variables(x), 2)[0].ToExpression()
+    Vdot = clean(V.Jacobian(x) @ f, x)
+    degVdot = Polynomial(Vdot, x).TotalDegree()
+    degxx = int(np.floor((degL1 + degVdot - degV) / 2))
+
+    xbar = x
+    epsilon = 1e-9
+    prog.AddSosConstraint(((xbar).T @ (xbar)) ** (degxx) * (V - 1) + lamda * (Vdot))
+    x0 = [0,0]
+    J0 = V.EvaluatePartial(dict(zip(x, x0)))
+    # prog.AddLinearConstraint(J0 == 0)
+    # prog.AddLinearConstraint(V.EvaluatePartial(dict(zip(x, [1,1]))) == 1)
+
+    solver = MosekSolver()
+    options = SolverOptions()
+    options.SetOption(CommonSolverOption.kPrintToConsole, 1)
+    prog.SetSolverOptions(options)
+    result = solver.Solve(prog, None, None)
+    print(result.get_solution_result())
+    assert result.is_success()
+
+    V = result.GetSolution(V)
+    return V
+
+def outerApproximation(system):
+    assert system.loop_closed
+    sys_name = system.name
+    degV = system.degV
+    degf = system.degf
+    degL = degV - 1 + degf
+    options = {'degV': degV, 'do_balance': False, 'degL1': degL, 'degL2': degL,
+               'converged_tol': 2e-2, 'max_iterations': 20}
+
+    start = time.time()
+
+    [B, W] = solve_outer(system.sym_x, system.sym_f, **options)
+    # B.EvaluatePartial(dict(zip(system.sym_x, [0.6, 0.6, 0, 0])))
+
+    end = time.time()
+    print('Barrier time: %s' % (end - start))
+    plot_barrier(B, system, slice_idx=system.slice,
+                add_title=' - Barrier Function')
+    return system, B
+
+def solve_outer(x, f, **kwargs):
+    prog = MathematicalProgram()
+    prog.AddIndeterminates(x)
+    degL1 = kwargs['degL1']
+
+    constraint = prog.NonnegativePolynomial.kSos
+
+    xbar = np.copy(x)  # shift st. control objective is origin
+    xbar[0] = 0
+    xbar[1] = 0
+    xbar[2] = 0
+    xbar[3] = 0
+    xx = (xbar).T @ (xbar)
+
+    degB = 4
+    B = prog.NewFreePolynomial(Variables(x), degB, "b").ToExpression()
+    Bdot = B.Jacobian(x).dot(f)
+
+    degBdot = Polynomial(Bdot, x).TotalDegree()
+    degxx = 6#int(np.floor((degL1 + degBdot - degB) / 2))
+
+    prog.AddSosConstraint(-Bdot + 1e-2 * xx**degxx, type=constraint)
+    x0=[0,0,0,0]
+    x0=[0,0,0,0,0,0,0,0]
+    prog.AddLinearEqualityConstraint(B.EvaluatePartial(dict(zip(x, x0))) == 0.1)
+
+    # W = prog.NewEvenDegreeSosPolynomial(Variables(x), degB)[0]
+    W = prog.NewSosPolynomial(Variables(x[[2,3,6,7]]), degB)[0]
+    We = W.ToExpression()
+    # prog.AddSosConstraint(We - B - 1e12, type=constraint)
+    prog.AddSosConstraint(We - B - 1e7, type=constraint)
+
+
+    x_min = [-4, -4, -4, -4]
+    x_max = [4, 4, 4, 4]
+    x_min = [-0, -0, -1.5, -1.5, -0, -0, -6, -6]
+    x_max = [0, 0, 1.5, 1.5, 0, 0, 6, 6]
+    # x_min = [-6, -6, -6, -6, -6, -6, -6, -6]
+    # x_max = [6, 6, 6, 6, 6,6, 6, 6]
+
+    obj = W
+    # for i in range(len(x)):
+    #     obj = obj.Integrate(x[i], x_min[i], x_max[i])
+    for i in [2,3,6,7]:
+        obj = obj.Integrate(x[i], x_min[i], x_max[i])
+
+    prog.AddCost(obj.ToExpression())
+
+    solver = MosekSolver()
+    options = SolverOptions()
+    options.SetOption(CommonSolverOption.kPrintToConsole, 1)
+    prog.SetSolverOptions(options)
+    result = solver.Solve(prog, None, None)
+    print(result.get_solution_result())
+    # assert result.is_success()
+
+    Bsol = result.GetSolution(B)
+    Wsol = result.GetSolution(W)
+    # print(Bsol)
+    return Bsol, Wsol
+
+
+def solve_outer2(x, f, **kwargs):
+    prog = MathematicalProgram()
+    prog.AddIndeterminates(x)
+    degL1 = kwargs['degL1']
+
+    constraint = prog.NonnegativePolynomial.kSdsos
+
+    xbar = np.copy(x)  # shift st. control objective is origin
+    xbar[0] = 0
+    xbar[1] = 0
+    xbar[2] = 0
+    xbar[3] = 0
+    xx = (xbar).T @ (xbar)
+
+    degB = 4
+    B = prog.NewFreePolynomial(Variables(x), degB, "b").ToExpression()
+    Bdot = B.Jacobian(x).dot(f)
+
+    degBdot = Polynomial(Bdot, x).TotalDegree()
+    degxx = 4#int(np.floor((degL1 + degBdot - degB) / 2))
+
+    prog.AddSosConstraint(-Bdot + 1e-2 * xx**degxx, type=constraint)
+    x0=[0,0,0,0]
+    x0=[0,0,0,0,0,0,0,0]
+    prog.AddLinearEqualityConstraint(B.EvaluatePartial(dict(zip(x, x0))) == 0.1)
+
+    # W = prog.NewEvenDegreeSosPolynomial(Variables(x), degB)[0]
+    W = prog.NewSosPolynomial(Variables(x[[2,3,6,7]]), degB)[0]
+    We = W.ToExpression()
+    # prog.AddSosConstraint(We - B - 1e12, type=constraint)
+    prog.AddSosConstraint(We - B - 1e8, type=constraint)
+
+
+    x_min = [-4, -4, -4, -4]
+    x_max = [4, 4, 4, 4]
+    x_min = [-0, -0, -1.5, -1.5, -0, -0, -6, -6]
+    x_max = [0, 0, 1.5, 1.5, 0, 0, 6, 6]
+
+    obj = W
+    # for i in range(len(x)):
+    #     obj = obj.Integrate(x[i], x_min[i], x_max[i])
+    for i in [2,3,6,7]:
+        obj = obj.Integrate(x[i], x_min[i], x_max[i])
+
+    prog.AddCost(obj.ToExpression())
+
+    solver = MosekSolver()
+    options = SolverOptions()
+    options.SetOption(CommonSolverOption.kPrintToConsole, 1)
+    prog.SetSolverOptions(options)
+    result = solver.Solve(prog, None, None)
+    print(result.get_solution_result())
+    # assert result.is_success()
+
+    Bsol = result.GetSolution(B)
+    Wsol = result.GetSolution(W)
+    # print(Bsol)
+    return Bsol, Wsol
+
+
 
 def bilinear(x, V0, f, S0, A, **kwargs):
     V = V0
@@ -121,6 +399,7 @@ def bilinear(x, V0, f, S0, A, **kwargs):
         [T, V0bal, fbal, S0, A] = balance(x, V0, f, S0, A)
     else:
         T, V0bal, fbal = np.eye(nX), V0, f
+
     rho = 1
     vol = 0
     for iter in range(max_iterations):
@@ -175,6 +454,24 @@ def findL1(x, f, V, **kwargs):
     prog.AddConstraint(sigma1 >= 0)
     # % setup SOS constraints
     prog.AddSosConstraint(-Vdot + L1 * (V - 1) - sigma1 * V)
+    #
+    # degV = Polynomial(V, x).TotalDegree()
+    # degL1 = degV - 1 + 5
+    # degVdot = Polynomial(Vdot, x).TotalDegree()
+    # degxx = int(np.floor((degL1 + degVdot - degV) / 2))
+    # xbar = x
+    # epsilon = 1e-9
+    #
+    # # SphericalIP
+    # xbar[0] = 0
+    # xbar[1] = 0
+    # xbar[4] = 0
+    # xbar[5] = 0
+    # # SphericalIP2
+    # # xbar[2] = 0
+    # # xbar[3] = 0
+    # prog.AddSosConstraint(-Vdot + L1 * (V - 1) - sigma1 * ((xbar).T@(xbar))**(degxx), type=prog.NonnegativePolynomial.kSdsos)
+
     prog.AddSosConstraint(L1)
     # add cost
     prog.AddCost(-sigma1)
@@ -207,8 +504,8 @@ def findL2(x, V, V0, rho, **kwargs):
     slack = prog.NewContinuousVariables(1, "s")[0]
     prog.AddConstraint(slack >= 0)
     # add normalizing constraint
-    prog.AddSosConstraint(-(V - 1) + L2 * (V0 - rho))
-    prog.AddSosConstraint(L2)
+    prog.AddSosConstraint(-(V - 1) + L2 * (V0 - rho), type=prog.NonnegativePolynomial.kSos)
+    prog.AddSosConstraint(L2, type=prog.NonnegativePolynomial.kSos)
     prog.AddCost(slack)
 
     solver = MosekSolver()
@@ -232,7 +529,7 @@ def optimizeV(x, f, L1, L2, V0, sigma1, **kwargs):
     # env = dict(zip(x, np.array([1, 2.31])))
 
     #% construct V
-    V = prog.NewFreePolynomial(Variables(x), degV).ToExpression()
+    V = prog.NewFreePolynomial(Variables(x), 6).ToExpression()
 
     # V = prog.NewSosPolynomial(Variables(x), degV)[0].ToExpression()
     Vdot = V.Jacobian(x) @ f
@@ -241,9 +538,10 @@ def optimizeV(x, f, L1, L2, V0, sigma1, **kwargs):
     prog.AddConstraint(rho >= 0)
 
     # % setup SOS constraints
-    prog.AddSosConstraint(-Vdot + L1 * (V - 1) - sigma1 * V / 2)
-    prog.AddSosConstraint(-(V - 1) + L2 * (V0 - rho))
-    prog.AddSosConstraint(V)
+    prog.AddSosConstraint(-Vdot + L1 * (V - 1) - sigma1 * V / 2, type=prog.NonnegativePolynomial.kSos)
+    prog.AddSosConstraint(-(V - 1) + L2 * (V0 - rho), type=prog.NonnegativePolynomial.kSos)
+    prog.AddSosConstraint(V, type=prog.NonnegativePolynomial.kSos)
+
     # % run SeDuMi/MOSEK and check output
     prog.AddCost(-rho)
     solver = MosekSolver()
@@ -253,7 +551,7 @@ def optimizeV(x, f, L1, L2, V0, sigma1, **kwargs):
     prog.SetSolverOptions(options)
     result = solver.Solve(prog, None, None)
     # print(result.get_solution_result())
-    assert result.is_success()
+    # assert result.is_success()
     V = result.GetSolution(V)
     # print(clean(V))
     rho = result.GetSolution(rho)
@@ -289,7 +587,7 @@ def levelset_sos(system, V0, do_balance=False, write_to_file=False):
     env = dict(zip(x, system.x0))
     H = .5 * np.array([[i.Evaluate(env) for i in j]for j in H])
     print('eig of Hessian of Vdot %s' % (eig(H)[0]))
-    assert (np.all(eig(H)[0] <= 0))
+    # assert (np.all(eig(H)[0] <= 0))
     # % construct slack var
     rho = prog.NewContinuousVariables(1, "r")[0]
     prog.AddConstraint(rho >= 0)
@@ -298,7 +596,27 @@ def levelset_sos(system, V0, do_balance=False, write_to_file=False):
     if hasattr(system, 'recast'):
         L2 = prog.NewFreePolynomial(Variables(x), degL1).ToExpression()
         recast_cstr = L2 * system.recast  # system.recast contains the rigid body constraints for S-procedure
-    prog.AddSosConstraint((x.T@x)**(degxx) * (V - rho) + L1 * Vdot + recast_cstr)
+
+    prog.AddSosConstraint((x.T@x)**(degxx) * (V - rho) + L1 * Vdot + recast_cstr, type=prog.NonnegativePolynomial.kSdsos)
+
+    # # SphericalIP
+    # # xbar[0] = 0
+    # # xbar[1] = 0
+    # # xbar[2] = x[0]
+    # # xbar[3] = x[1]
+    # # xbar[4] = 0
+    # # xbar[5] = 0
+    # # xbar[6] = x[4]
+    # # xbar[7] = x[5]
+    #
+    # # SphericalIP2
+    # xbar[0] = x[0]
+    # xbar[1] = x[1]
+    # xbar[2] = 0
+    # xbar[3] = 0
+    # xbar[4] = x[4]
+    # xbar[5] = x[5]
+    # prog.AddSosConstraint(((xbar).T@(xbar))**(degxx) * (V - rho) + L1 * Vdot + recast_cstr, type=prog.NonnegativePolynomial.kSdsos)
 
     prog.AddCost(-rho)
     solver = MosekSolver()

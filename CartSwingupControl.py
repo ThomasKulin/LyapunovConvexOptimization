@@ -241,6 +241,7 @@ def cartpole_sos_lower_bound(deg):
     J_expr = J.ToExpression()
 
     # Maximize volume beneath the value function.
+    # z = (x, s, c, xdot, thetadot)
     obj = J.Integrate(z[0], z_min_int[0], z_max_int[0])
     for i in range(3, nz):
         obj = obj.Integrate(z[i], z_min_int[i], z_max_int[i])

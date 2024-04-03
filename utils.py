@@ -136,5 +136,7 @@ def matrix_det(M):
     return determinant
 
 
+
+
 def matrix_minor(M, i, j):
     return np.delete(np.delete(M, i, axis=0), j, axis=1)

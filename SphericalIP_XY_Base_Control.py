@@ -58,6 +58,13 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     l = 0.9
     g = 9.81
 
+    # Kinematic Parameters
+    m1 = 4  # mass of board
+    m2 = 90  # mass of rider
+    L = 0.9  # half height of rider
+    l = 1  # length of board
+    g = 9.81  # gravity, duh
+
     # Map from original state to augmented state.
     # Uses sympy to be able to do symbolic integration later on.
     # x = (x, y, theta, phi, xdot, ydot, thetadot, phidot)
@@ -103,6 +110,7 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
         f_val[5] = u[1] * denominator  # yddot
         f_val[6] = (g / l * cp * st - phi_dot ** 2 * ct * st - u[0] / l * ct + u[1] / l * sp * st) * denominator  # thetaddot
         f_val[7] = (g / l * sp + 2 * phi_dot * theta_dot * st - u[1] / l * cp) # phiddot
+
         return T @ f_val, denominator
 
     def f2(z, T, dtype=Expression):
@@ -116,13 +124,17 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
         f2_val[5, :] = [0, 1]
         f2_val[6, :] = [-cp / l, sp * st / l]
         f2_val[7, :] = [0, -cp / (l * ct)]
+
         return T @ f2_val
 
 
     # Define State Limits
     u_max = np.array([30, 30])
-    z_max = np.array([1.5, 1.5, np.sin(np.pi/2), 1, np.sin(np.pi / 2), 1, 4, 4, 3, 3])
-    z_min = np.array([-1.5, -1.5, -np.sin(np.pi/2), 0, -np.sin(np.pi/2), 0, -4, -4, -3, -3])
+    # z = (x, y, st, ct, sp, cp, xdot, ydot, thetadot, phidot)
+    # z_max = np.array([1.5, 1.5, np.sin(np.pi/2), 1, np.sin(np.pi / 2), 1, 5, 4, 4, 4])
+    # z_min = np.array([-1.5, -1.5, -np.sin(np.pi/2), 0, -np.sin(np.pi/2), 0, -5, -4, -4, -4])
+    z_max = np.array([1.5, 1.5, np.sin(np.pi / 2), 1, np.sin(np.pi / 2), 1, 5, 4, 4, 4])
+    z_min = np.array([-1.5, -1.5, -np.sin(np.pi / 2), 0, -np.sin(np.pi / 2), 0, -5, -4, -4, -4])
     assert (z_min < z_max).all()
 
     # Equilibrium point in both the system coordinates.
@@ -134,13 +146,14 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     # Quadratic running cost in augmented state.
     # z = (x, y, st, ct, sp, cp, xdot, ydot, thetadot, phidot)
     # state weighting matrix
-    # Q_diag = [0.01, 0.01, 20000, 20000, 20000, 20000, 1, 1, 1, 1]  # Q20000
-    Q_diag = [0.01, 0.01, 2e4, 2e4, 2e4, 2e4, .01, .01, 2e2, 2e2]  #TP2e4_TPDOT2e2
+    Q_diag = [0, 0, 20000, 20000, 20000, 20000, 0, 0, 1, 1]  # Q20000
+    # Q_diag = [0.01, 0.01, 2e4, 2e4, 2e4, 2e4, .01, .01, 2e2, 2e2]  #TP2e4_TPDOT2e2
 
     Q = np.diag(Q_diag)
     # u = (fx fy)
     # control weighting matrix
     R = np.array([[0.1, 0.0], [0.0, 0.1]])
+
 
     def l_cost(z, u):
         return (z - z0).dot(Q).dot(z - z0) + u.dot(R).dot(u)
@@ -167,8 +180,8 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
         dJdz = J_star.Jacobian(z)
         u_star = -0.5 * Rinv.dot(f2_val.T).dot(dJdz.T)
         uToStr(u_star, filename+".txt")
-        f_val, denom = f(z, u, T_val)
-        # degF = max([Polynomial(i).TotalDegree() for i in f_val])
+        f_val, denom = f(z, u_star, T_val)
+        degF = max([Polynomial(i).TotalDegree() for i in f_val])
         # deg_Ustar = max([[Polynomial(i, z).TotalDegree() for i in j] for j in u_star])
         plot_value_function(J_star, z, z_max, u_max, plot_states="thetaphi", actuator_saturate=False)
         return 0
@@ -212,7 +225,8 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
     LHS = J_dot + l_cost(z, u) * denominator  # Lower bound on cost to go V >= -l  -->  V + l >= 0
     # LHS = J_dot + 10*denominator# Relaxed Hamilton jacobian bellman conditions, non-optimal, but still lyapunov
 
-    ring_deg = 4
+    ring_deg = deg
+    # z = (x, y, st, ct, sp, cp, xdot, ydot, thetadot, phidot)
     # S procedure for st^2 + ct^2 + sp^2 + cp^2 = 2.
     lam = prog.NewFreePolynomial(Variables(zu), ring_deg).ToExpression()  # doesnt have to be SOS!! bc we're dealing with "g"==0 not <=0
     S_sphere = lam * (z[2] ** 2 + z[3] ** 2 * z[4] ** 2 + z[5] ** 2 * z[3] ** 2 - 1)
@@ -412,6 +426,6 @@ def uToStr(U, file=None):
 
 
 
-# filename = "/home/thomas/Documents/thesis/LyapunovConvexOptimization/SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/J_lower_bound_deg_4_SOS_Q20000"
-filename = "/home/thomas/Documents/thesis/LyapunovConvexOptimization/SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/kSdsos/J_lower_bound_deg_4_TP2e4_TPDOT2e2"
-J_star, z = spherical_ip_sos_lower_bound(4, constraint = "kSdsos", visualize=True, actuator_saturate=False, read_file=filename)
+filename = "/home/thomas/Documents/thesis/LyapunovConvexOptimization/SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/J_lower_bound_deg_4_SOS_Q20000"
+# filename = "/home/thomas/Documents/thesis/LyapunovConvexOptimization/SphericalIP/data/[1.5 1.5 1.  1.  1.  1.  4.  4.  3.  3. ]/kSdsos/J_lower_bound_deg_4_TP2e4_TPDOT2e2"
+J_star, z = spherical_ip_sos_lower_bound(4, constraint = "kSdsos", visualize=True, actuator_saturate=False, read_file=None)

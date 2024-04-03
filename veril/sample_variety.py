@@ -20,6 +20,8 @@ rho: scalar Lyapunov level
 
 def verify_via_variety(system, V, init_root_threads=1, num_samples=10):
     assert system.loop_closed
+    if V is None:
+        A, S, V = system.linearized_quadractic_V()
     system.set_sample_variety_features(V)
     Vdot = V.Jacobian(system.sym_x) @ system.sym_f
     # Vdot = system.sym_Vdot
@@ -47,8 +49,8 @@ def verify_via_variety(system, V, init_root_threads=1, num_samples=10):
             except:
                 print("Y concatenation error")
             rho_max = rho if rho>rho_max else rho_max
-    print(f"rho: {rho_max}")
-    plot_funnel(V / rho_max, system, slice_idx=system.slice,
+        print(f"rho: {rho_max}")
+        plot_funnel(V / rho_max, system, slice_idx=system.slice,
                 add_title=' - Sampling Variety ' + 'Result')
     return V, rho
 
@@ -162,11 +164,15 @@ def sample_on_variety(variety, root_threads, x0, slice_idx=None):
 
 def x_to_Y(system, x, variety, do_transform=True, test_only=False):
     enough_x = False
+    first = False
     while not enough_x:
-        more_x = sample_on_variety(variety, 1, system.x0)
-        x = np.vstack([x, more_x])
-        V = system.get_v_values(x)
-        x, V = balancing_V(x, V)
+        for i in (range(500) if first == True else range(1)):
+            more_x = sample_on_variety(variety, 1, system.x0)
+            x = np.vstack([x, more_x])
+            V = system.get_v_values(x)
+            x, V = balancing_V(x, V)
+            print(i)
+        first=False
         [xxd, psi] = system.get_sample_variety_features(x)
         trans_psi, T = coordinate_ring_transform(psi, do_transform, test_only)
         enough_x = check_genericity(trans_psi, test_only)
@@ -178,7 +184,7 @@ def x_to_Y(system, x, variety, do_transform=True, test_only=False):
     Y = [x, V, xxd, trans_psi, T]
     if not test_only:
         path = '../data/' + system.name + '/variety_Y.npz'
-        np.savez_compressed(path, x=Y[0], V=Y[1], xxd=Y[2], psi=Y[3], T=Y[4])
+        # np.savez_compressed(path, x=Y[0], V=Y[1], xxd=Y[2], psi=Y[3], T=Y[4])
     return Y
 
 
