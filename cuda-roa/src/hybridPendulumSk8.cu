@@ -5,7 +5,7 @@
 #include <fstream>
 #include <iostream>
 
-#define NUM_SIMULATIONS 100000
+#define NUM_SIMULATIONS 1000000
 #define NUM_TIMESTEPS 1500
 #define DT 0.001
 
@@ -41,11 +41,11 @@ __global__ void simulate(curandState_t* states, double *state, double *initial_s
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if (idx >= NUM_SIMULATIONS) return;
     
-    double Vx = 15;
+    double Vx = (curand_uniform_double(&states[idx]) * 2 - 1) * 15;
 
     // Initial state
     double x = 0;
-    double xdot = Vx;
+    double xdot = (curand_uniform_double(&states[idx]) * 2 - 1) * 15;
     double phi = 1e-12;
     double phi_dot = 0;
     double theta = (curand_uniform_double(&states[idx]) * 1 * M_PI - M_PI/2)*1; 
@@ -66,6 +66,9 @@ __global__ void simulate(curandState_t* states, double *state, double *initial_s
     	    	case 3:
     	    	    psi = 0;
     	    	    break;
+    	    	case 4:
+    	    	    xdot = 0;
+    	    	    Vx = 0;
     	    	case 6:
     	    	    theta_dot = 0;
     	    	    break;
@@ -97,9 +100,10 @@ __global__ void simulate(curandState_t* states, double *state, double *initial_s
         double tau_phi = (-tau_psi);
     	
         // Control Inputs
-        int fx = (-0.5 * (10 * ((100.81077386242046 * theta - 9.3528813159590338e-05 * psi + 6.5557135565276514 * theta_dot + 0.00049666388769612651 * psi_dot) * ((0 / (4 + 90 * pow(sin(theta), 2))) + ((-1 * cos(theta)) / (0.90000000000000002 * (4 + 90 * pow(sin(theta), 2)))))) + 2 * (0 / (4 + 90 * pow(sin(theta), 2)))));
-	int fy = -(-0.5 * ((( - 0.00043485952235736494 * theta + 133901.88660019662 * psi + 0.00049666388769612651 * theta_dot + 27440.692466553719 * psi_dot) * ((0 / (4 + 90 * pow(sin(theta), 2))) + 2 * (cos(psi) / (72.900000000000006 * pow(cos(theta), 2))))) + 2 * ((100.81077386242046 * theta - 9.3528813159590338e-05 * psi + 6.5557135565276514 * theta_dot + 0.00049666388769612651 * psi_dot) * ((-94 * sin(theta) * sin(psi)) / (72.900000000000006 * (4 + 90 * pow(sin(theta), 2))))) + (0 / (4 + 90 * pow(sin(theta), 2)))));	
+        double fx = (-0.5 * (10 * ((100.81077386242046 * theta - 9.3528813159590338e-05 * psi + 6.5557135565276514 * theta_dot + 0.00049666388769612651 * psi_dot) * ((0 / (4 + 90 * pow(sin(theta), 2))) + ((-1 * cos(theta)) / (0.90000000000000002 * (4 + 90 * pow(sin(theta), 2)))))) + 2 * (0 / (4 + 90 * pow(sin(theta), 2)))));
+	double fy = -(-0.5 * ((( - 0.00043485952235736494 * theta + 133901.88660019662 * psi + 0.00049666388769612651 * theta_dot + 27440.692466553719 * psi_dot) * ((0 / (4 + 90 * pow(sin(theta), 2))) + 2 * (cos(psi) / (72.900000000000006 * pow(cos(theta), 2))))) + 2 * ((100.81077386242046 * theta - 9.3528813159590338e-05 * psi + 6.5557135565276514 * theta_dot + 0.00049666388769612651 * psi_dot) * ((-94 * sin(theta) * sin(psi)) / (72.900000000000006 * (4 + 90 * pow(sin(theta), 2))))) + (0 / (4 + 90 * pow(sin(theta), 2)))));	
 
+	x_dot = xdot;
         
         // Calculate second derivatives based on equations of motion
         //double x_ddot = (M_RIDER * LENGTH * sin(theta) * (theta_dot * theta_dot + psi_dot * psi_dot * cos(theta)*cos(theta)) - GRAVITY * M_RIDER * sin(theta) * cos(theta) * cos(psi) + u_x + u_y*sin(psi)*sin(theta)*cos(theta)/LENGTH) / (M_BOARD+M_RIDER*sin(theta)*sin(theta));
@@ -155,8 +159,8 @@ int main() {
     double *d_initial_state;
     double *d_final_state;
     
-    int slice_x = 2;
-    int slice_y = 3;
+    int slice_x = 3;
+    int slice_y = 4;
     
     cudaError_t error1, error2, error3, error4;
     error1 = cudaMalloc((void**)&d_state, NUM_SIMULATIONS*8*sizeof(double));
@@ -190,12 +194,12 @@ int main() {
 
     // Write initial states to binary file
     std::ofstream initial_file("initial_states.bin", std::ios::binary);
-    initial_file.write(reinterpret_cast<char*>(h_initial_state), NUM_SIMULATIONS*6*sizeof(double));
+    initial_file.write(reinterpret_cast<char*>(h_initial_state), NUM_SIMULATIONS*8*sizeof(double));
     initial_file.close();
 
     // Write final states to binary file
     std::ofstream final_file("final_states.bin", std::ios::binary);
-    final_file.write(reinterpret_cast<char*>(h_final_state), NUM_SIMULATIONS*6*sizeof(double));
+    final_file.write(reinterpret_cast<char*>(h_final_state), NUM_SIMULATIONS*8*sizeof(double));
     final_file.close();
 
     delete[] h_initial_state;

@@ -5,9 +5,9 @@
 #include <fstream>
 #include <iostream>
 
-#define NUM_SIMULATIONS 100000
-#define NUM_TIMESTEPS 30000
-#define DT 0.0001
+#define NUM_SIMULATIONS 1000000
+#define NUM_TIMESTEPS 1500
+#define DT 0.001
 
 // Model parameters
 #define l 1
@@ -41,11 +41,11 @@ __global__ void simulate(curandState_t* states, double *state, double *initial_s
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if (idx >= NUM_SIMULATIONS) return;
     
-    double Vx = 0;
+    double Vx = (curand_uniform_double(&states[idx]) * 2 - 1) * 15;
 
     // Initial state
     double x = 0;
-    double xdot = Vx;
+    double xdot = (curand_uniform_double(&states[idx]) * 2 - 1) * 15;
     double phi = 1e-12;
     double phi_dot = 0;
     double theta = (curand_uniform_double(&states[idx]) * 1 * M_PI - M_PI/2)*1; 
@@ -66,6 +66,9 @@ __global__ void simulate(curandState_t* states, double *state, double *initial_s
     	    	case 3:
     	    	    psi = 0;
     	    	    break;
+    	    	case 4:
+    	    	    xdot = 0;
+    	    	    Vx = 0;
     	    	case 6:
     	    	    theta_dot = 0;
     	    	    break;
@@ -157,8 +160,8 @@ int main() {
     double *d_initial_state;
     double *d_final_state;
     
-    int slice_x = 2;
-    int slice_y = 3;
+    int slice_x = 3;
+    int slice_y = 4;
     
     cudaError_t error1, error2, error3, error4;
     error1 = cudaMalloc((void**)&d_state, NUM_SIMULATIONS*8*sizeof(double));
@@ -192,12 +195,12 @@ int main() {
 
     // Write initial states to binary file
     std::ofstream initial_file("initial_states.bin", std::ios::binary);
-    initial_file.write(reinterpret_cast<char*>(h_initial_state), NUM_SIMULATIONS*6*sizeof(double));
+    initial_file.write(reinterpret_cast<char*>(h_initial_state), NUM_SIMULATIONS*8*sizeof(double));
     initial_file.close();
 
     // Write final states to binary file
     std::ofstream final_file("final_states.bin", std::ios::binary);
-    final_file.write(reinterpret_cast<char*>(h_final_state), NUM_SIMULATIONS*6*sizeof(double));
+    final_file.write(reinterpret_cast<char*>(h_final_state), NUM_SIMULATIONS*8*sizeof(double));
     final_file.close();
 
     delete[] h_initial_state;
