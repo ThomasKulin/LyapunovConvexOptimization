@@ -32,7 +32,7 @@ from pydrake.all import (
     WrapToSystem,
 )
 from pydrake.examples import PendulumParams
-from scipy.integrate import quad
+from scipy.integrate import quad, dblquad
 import sympy as sp
 
 from underactuated import ConfigureParser
@@ -208,10 +208,10 @@ def spherical_ip_sos_lower_bound(deg, objective="integrate_ring", constraint = "
         c1_deg = monomial.degree(z[3])  # cos(theta)
         s2_deg = monomial.degree(z[4])  # sin(phi)
         c2_deg = monomial.degree(z[5])  # cos(phi)
-        monomial_int = quad(lambda x: np.sin(x) ** s1_deg * np.cos(x) ** c1_deg * np.sin(x) ** s2_deg * np.cos(x) ** c2_deg, -np.pi/2, np.pi/2)[0]
-        # monomial_int = quad(lambda x: np.sin(x) ** s2_deg * np.cos(x) ** c2_deg, -np.pi/2, np.pi/2)[0]
+        # monomial_int = quad(lambda x: np.sin(x) ** s1_deg * np.cos(x) ** c1_deg * np.sin(x) ** s2_deg * np.cos(x) ** c2_deg, -np.pi/2, np.pi/2)[0]
+        monomial_int = dblquad(lambda phi, theta: np.sin(theta) ** s1_deg * np.cos(theta) ** c1_deg * np.sin(phi) ** s2_deg * np.cos(phi) ** c2_deg, 0, 4*np.pi/2, 0, 2*np.pi/2)[0]  # need to perform a double integral!
         if np.abs(monomial_int) <= 1e-5:
-            monomial_int1 = 0
+            monomial_int = 0
         cost += monomial_int*coeff
     poly = Polynomial(cost)
     cost_coeff = [c.Evaluate() for c in poly.monomial_to_coefficient_map().values()]
